@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>PIZDACRAFT — Alpha 1.2.6</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.4/mqtt.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -454,11 +453,11 @@
                 </div>
             </div>
 
-            <!-- ОКНО СЕТЕВОЙ ИГРЫ (МУЛЬТИПЛЕЕР ГИБРИДНЫЙ WSS + PEERJS) -->
+            <!-- ОКНО СЕТЕВОЙ ИГРЫ (МУЛЬТИПЛЕЕР ГИБРИДНЫЙ WSS + WEBRTC БЕЗ PEERJS) -->
             <div id="menu-multiplayer" class="hidden w-full mc-dirt-panel flex-col gap-3" style="max-height: 78vh; overflow-y: auto;">
-                <h2 class="mc-font text-center txt-yellow" style="font-size: 13px; margin: 0;">Сетевая игра (WSS + P2P)</h2>
+                <h2 class="mc-font text-center txt-yellow" style="font-size: 13px; margin: 0;">Сетевая игра (MQTT WSS + WebRTC)</h2>
                 <p class="mc-font-sm txt-gray text-center" style="font-size: 9px; margin: 0;">
-                    Работает на GitHub Pages без ошибок CORS/403 через чистый WebSocket + P2P!
+                    Без PeerJS (0.peerjs.com)! Работает на GitHub Pages без ошибок 403/CORS.
                 </p>
 
                 <div>
@@ -2318,6 +2317,8 @@
 
             if (isLocalAction && mpManager) {
                 mpManager.broadcastBlockUpdate(x, y, z, newBlockId);
+            } else if (mpManager && mpManager.isHost && mpManager.roomCode) {
+                mpManager.publishRetainedWorldState();
             }
         }
 
@@ -2354,29 +2355,39 @@
         }
 
         /***********************************************************************
-         * 9.5. ГИБРИДНЫЙ МУЛЬТИПЛЕЕР (WEBSOCKET MQTT WSS + PEERJS С ЯВНЫМ ID)
-         * Полностью совместим с GitHub Pages (без ошибок CORS и 403 Forbidden)
+         * 9.5. МУЛЬТИПЛЕЕР БЕЗ PEERJS (MQTT OVER WSS + НАТИВНЫЙ WEBRTC P2P)
+         * Полностью совместим с GitHub Pages (никаких запросов к 0.peerjs.com и 403)
          ***********************************************************************/
         class MultiplayerManager {
             constructor() {
-                this.peer = null;
                 this.mqttClient = null;
                 this.isHost = false;
                 this.roomCode = '';
                 this.myClientId = 'pizda-node-' + Math.random().toString(36).substring(2, 10);
                 this.nickname = 'Steve_' + Math.floor(100 + Math.random() * 899);
-                this.connections = new Map();
-                this.remotePlayers = new Map();
+
+                // Нативные браузерные WebRTC-соединения (RTCPeerConnection + RTCDataChannel)
+                this.rtcPeers = new Map();       // peerId -> RTCPeerConnection
+                this.rtcChannels = new Map();    // peerId -> RTCDataChannel
+                this.remotePlayers = new Map();  // peerId -> 3D Avatar & state
                 this.syncTimer = 0;
                 this.worldReceived = false;
+                this.lastChatId = null;
 
-                // Публичные WebSocket-брокеры (работают через чистый WSS без HTTP CORS и 403 на GitHub Pages)
+                // Публичные WebSocket MQTT брокеры с поддержкой любого Origin (включая *.github.io)
                 this.wssBrokers = [
                     'wss://broker.emqx.io:8084/mqtt',
                     'wss://broker.hivemq.com:8884/mqtt',
                     'wss://test.mosquitto.org:8081/mqtt'
                 ];
                 this.currentBrokerIdx = 0;
+
+                this.rtcConfig = {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                };
 
                 const nickInput = document.getElementById('input-mp-nick');
                 if (nickInput) nickInput.value = this.nickname;
@@ -2491,28 +2502,42 @@
                     scene.remove(rp.group);
                     this.remotePlayers.delete(peerId);
                 }
-                this.connections.delete(peerId);
+                const ch = this.rtcChannels.get(peerId);
+                if (ch) {
+                    try { ch.close(); } catch (e) {}
+                    this.rtcChannels.delete(peerId);
+                }
+                const pc = this.rtcPeers.get(peerId);
+                if (pc) {
+                    try { pc.close(); } catch (e) {}
+                    this.rtcPeers.delete(peerId);
+                }
                 this.updateHudStatus();
             }
 
             clearAllRemotePlayers() {
                 if (this.mqttClient && this.mqttClient.connected && this.roomCode) {
-                    this.publishMqtt({
+                    this.publishEvent({
                         type: 'player_left',
                         peerId: this.myClientId
                     });
                 }
                 this.remotePlayers.forEach(rp => scene.remove(rp.group));
                 this.remotePlayers.clear();
-                this.connections.forEach(conn => conn.close());
-                this.connections.clear();
+
+                this.rtcChannels.forEach(ch => {
+                    try { ch.close(); } catch (e) {}
+                });
+                this.rtcChannels.clear();
+
+                this.rtcPeers.forEach(pc => {
+                    try { pc.close(); } catch (e) {}
+                });
+                this.rtcPeers.clear();
+
                 if (this.mqttClient) {
                     try { this.mqttClient.end(true); } catch (e) {}
                     this.mqttClient = null;
-                }
-                if (this.peer) {
-                    try { this.peer.destroy(); } catch (e) {}
-                    this.peer = null;
                 }
                 this.roomCode = '';
                 this.worldReceived = false;
@@ -2527,62 +2552,195 @@
                     bar.textContent = 'Сеть: Одиночная игра';
                 } else {
                     const count = this.remotePlayers.size + 1;
-                    bar.textContent = `Сеть: ${this.isHost ? 'Хост' : 'Клиент'} [${this.roomCode}] (Игроков: ${count})`;
+                    const p2pCount = this.rtcChannels.size;
+                    const modeTag = p2pCount > 0 ? 'WSS+WebRTC' : 'WSS';
+                    bar.textContent = `Сеть: ${this.isHost ? 'Хост' : 'Клиент'} [${this.roomCode}] (${modeTag}, Игроков: ${count})`;
                 }
             }
 
-            getRoomTopic() {
-                return `pizdacraft/v2/room/${this.roomCode}`;
+            getEventsTopic() {
+                return `pizdacraft/v3/room/${this.roomCode}/events`;
             }
 
-            publishMqtt(packet) {
+            getStateTopic() {
+                return `pizdacraft/v3/room/${this.roomCode}/state`;
+            }
+
+            publishEvent(packet) {
                 if (!this.mqttClient || !this.mqttClient.connected || !this.roomCode) return;
                 try {
                     const payload = JSON.stringify({
                         ...packet,
                         senderId: this.myClientId
                     });
-                    this.mqttClient.publish(this.getRoomTopic(), payload, { qos: 0 });
+                    this.mqttClient.publish(this.getEventsTopic(), payload, { qos: 0, retain: false });
                 } catch (e) {}
             }
 
-            // Подключение к WebSocket-комнате (работает везде, включая GitHub Pages)
-            connectWssRoom(onConnectedCallback) {
+            // Закрепление состояния мира на брокере (retain: true), чтобы новые игроки мгновенно получали карту
+            publishRetainedWorldState() {
+                if (!this.isHost || !this.mqttClient || !this.mqttClient.connected || !this.roomCode) return;
+                try {
+                    const statePacket = {
+                        type: 'world_init',
+                        seedString: worldSettings.seedString,
+                        terrainType: worldSettings.terrainType,
+                        radius: worldSettings.radius,
+                        timeIdx: currentTimeIdx,
+                        hostNick: this.nickname,
+                        hostPeerId: this.myClientId,
+                        mods: Array.from(modifiedBlocksHistory.entries()),
+                        senderId: this.myClientId
+                    };
+                    this.mqttClient.publish(this.getStateTopic(), JSON.stringify(statePacket), { qos: 0, retain: true });
+                } catch (e) {}
+            }
+
+            // Нативный браузерный WebRTC (RTCPeerConnection) поверх MQTT-сигналинга без сторонних серверов PeerJS
+            initiateWebRtcConnection(remotePeerId, isInitiator) {
+                if (typeof RTCPeerConnection === 'undefined') return null;
+                if (!remotePeerId || remotePeerId === this.myClientId) return null;
+                if (this.rtcPeers.has(remotePeerId)) return this.rtcPeers.get(remotePeerId);
+
+                try {
+                    const pc = new RTCPeerConnection(this.rtcConfig);
+                    this.rtcPeers.set(remotePeerId, pc);
+
+                    pc.onicecandidate = (event) => {
+                        if (event.candidate) {
+                            this.publishEvent({
+                                type: 'webrtc_signal',
+                                targetPeerId: remotePeerId,
+                                candidate: event.candidate
+                            });
+                        }
+                    };
+
+                    const attachChannel = (channel) => {
+                        channel.onopen = () => {
+                            this.rtcChannels.set(remotePeerId, channel);
+                            this.updateHudStatus();
+                        };
+                        channel.onmessage = (evt) => {
+                            try {
+                                const pkt = JSON.parse(evt.data);
+                                this.handlePacket(pkt);
+                            } catch (e) {}
+                        };
+                        channel.onclose = () => {
+                            this.rtcChannels.delete(remotePeerId);
+                            this.updateHudStatus();
+                        };
+                    };
+
+                    if (isInitiator) {
+                        const channel = pc.createDataChannel('pizdacraft-fast', { ordered: false, maxRetransmits: 0 });
+                        attachChannel(channel);
+                        pc.createOffer()
+                            .then(offer => pc.setLocalDescription(offer))
+                            .then(() => {
+                                this.publishEvent({
+                                    type: 'webrtc_signal',
+                                    targetPeerId: remotePeerId,
+                                    sdp: pc.localDescription
+                                });
+                            })
+                            .catch(() => {});
+                    } else {
+                        pc.ondatachannel = (event) => {
+                            attachChannel(event.channel);
+                        };
+                    }
+
+                    return pc;
+                } catch (e) {
+                    return null;
+                }
+            }
+
+            async handleWebRtcSignal(data) {
+                const fromPeer = data.senderId || data.peerId;
+                if (!fromPeer || fromPeer === this.myClientId) return;
+
+                let pc = this.rtcPeers.get(fromPeer);
+                if (!pc && data.sdp && data.sdp.type === 'offer') {
+                    pc = this.initiateWebRtcConnection(fromPeer, false);
+                }
+                if (!pc) return;
+
+                try {
+                    if (data.sdp) {
+                        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                        if (data.sdp.type === 'offer') {
+                            const answer = await pc.createAnswer();
+                            await pc.setLocalDescription(answer);
+                            this.publishEvent({
+                                type: 'webrtc_signal',
+                                targetPeerId: fromPeer,
+                                sdp: pc.localDescription
+                            });
+                        }
+                    } else if (data.candidate && pc.remoteDescription) {
+                        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                    }
+                } catch (e) {}
+            }
+
+            // Подключение к кластеру MQTT over WSS с автоматическим переключением зеркал
+            connectWssRoom(onConnectedCallback, onFailCallback) {
                 if (typeof mqtt === 'undefined') {
-                    this.setStatus('WSS модуль недоступен, используем резервный P2P...', false);
+                    this.setStatus('Ошибка: библиотека MQTT не загрузилась', true);
                     return;
                 }
 
-                const brokerUrl = this.wssBrokers[this.currentBrokerIdx % this.wssBrokers.length];
-                const client = mqtt.connect(brokerUrl, {
-                    clientId: this.myClientId + '-' + Math.floor(Math.random() * 9999),
-                    clean: true,
-                    connectTimeout: 6000,
-                    reconnectPeriod: 2000
-                });
+                let connectedOnce = false;
+                const tryBroker = (brokerIndex) => {
+                    const brokerUrl = this.wssBrokers[brokerIndex % this.wssBrokers.length];
+                    this.setStatus(`Подключение к WSS (${brokerUrl.replace('wss://', '').split('/')[0]})...`);
 
-                this.mqttClient = client;
-
-                client.on('connect', () => {
-                    const topic = this.getRoomTopic();
-                    client.subscribe(topic, { qos: 0 }, (err) => {
-                        if (!err && onConnectedCallback) {
-                            onConnectedCallback();
-                        }
+                    const client = mqtt.connect(brokerUrl, {
+                        clientId: this.myClientId + '-' + Math.floor(Math.random() * 9999),
+                        clean: true,
+                        connectTimeout: 5000,
+                        reconnectPeriod: 2500
                     });
-                });
 
-                client.on('message', (topic, messageBuffer) => {
-                    try {
-                        const data = JSON.parse(messageBuffer.toString());
-                        if (!data || data.senderId === this.myClientId) return;
-                        this.handlePacket(null, data);
-                    } catch (e) {}
-                });
+                    this.mqttClient = client;
 
-                client.on('error', () => {
-                    this.currentBrokerIdx++;
-                });
+                    const failoverTimer = setTimeout(() => {
+                        if (!connectedOnce) {
+                            try { client.end(true); } catch (e) {}
+                            if (brokerIndex + 1 < this.wssBrokers.length) {
+                                tryBroker(brokerIndex + 1);
+                            } else if (onFailCallback) {
+                                onFailCallback();
+                            }
+                        }
+                    }, 5200);
+
+                    client.on('connect', () => {
+                        connectedOnce = true;
+                        clearTimeout(failoverTimer);
+                        const topics = [this.getEventsTopic(), this.getStateTopic()];
+                        client.subscribe(topics, { qos: 0 }, (err) => {
+                            if (!err && onConnectedCallback) {
+                                onConnectedCallback();
+                            }
+                        });
+                    });
+
+                    client.on('message', (topic, messageBuffer) => {
+                        try {
+                            const text = messageBuffer.toString();
+                            if (!text) return;
+                            const data = JSON.parse(text);
+                            if (!data || data.senderId === this.myClientId) return;
+                            this.handlePacket(data);
+                        } catch (e) {}
+                    });
+                };
+
+                tryBroker(this.currentBrokerIdx);
             }
 
             startHostServer() {
@@ -2591,51 +2749,19 @@
                 this.isHost = true;
                 const randomDigits = Math.floor(1000 + Math.random() * 9000);
                 this.roomCode = `PIZDA-${randomDigits}`;
-                this.myClientId = this.roomCode;
+                this.myClientId = 'host-' + this.roomCode + '-' + Math.random().toString(36).substring(2, 6);
 
-                this.setStatus(`Запуск сервера ${this.roomCode}...`);
-
-                let roomStarted = false;
-                const finishHostLaunch = () => {
-                    if (roomStarted) return;
-                    roomStarted = true;
+                this.connectWssRoom(() => {
+                    this.publishRetainedWorldState();
                     this.setStatus(`Сервер создан! Код комнаты: ${this.roomCode}`);
                     document.getElementById('hud-room-code').textContent = this.roomCode;
                     document.getElementById('hud-room-box').classList.remove('hidden');
                     this.updateHudStatus();
                     startGameSession();
                     this.addChatMessage('', `Сервер запущен! Отправьте другу код: ${this.roomCode}`, '#55FF55');
-                };
-
-                // 1. Основной транспорт: чистый WebSocket через MQTT-брокер (мгновенно и без CORS на GitHub Pages)
-                this.connectWssRoom(() => {
-                    finishHostLaunch();
+                }, () => {
+                    this.setStatus('Не удалось подключиться к WSS брокерам. Проверьте сеть.', true);
                 });
-
-                // 2. Параллельный WebRTC-канал через PeerJS (передаём явный строковый ID this.roomCode, поэтому 0.peerjs.com/peerjs/id НЕ вызывается)
-                if (typeof Peer !== 'undefined') {
-                    try {
-                        this.peer = new Peer(this.roomCode, {
-                            config: {
-                                iceServers: [
-                                    { urls: 'stun:stun.l.google.com:19302' },
-                                    { urls: 'stun:stun1.l.google.com:19302' }
-                                ]
-                            }
-                        });
-                        this.peer.on('open', () => finishHostLaunch());
-                        this.peer.on('connection', (conn) => this.setupConnection(conn));
-                        this.peer.on('error', () => {
-                            // Если облако PeerJS недоступно, сервер продолжает работать через WSS
-                            finishHostLaunch();
-                        });
-                    } catch (e) {
-                        finishHostLaunch();
-                    }
-                }
-
-                // Гарантированный вход через 1.5 сек, даже если сеть долго отвечает
-                setTimeout(() => finishHostLaunch(), 1500);
             }
 
             joinServerByCode() {
@@ -2653,102 +2779,44 @@
                 this.isHost = false;
                 this.roomCode = code;
                 this.worldReceived = false;
+                this.myClientId = 'client-' + Math.random().toString(36).substring(2, 10);
 
-                // ВАЖНО: Всегда генерируем непустой строковый ID клиента локально!
-                // Это полностью предотвращает вызов retrieveId() -> fetch('https://0.peerjs.com/peerjs/id') и ошибку 403 / CORS на GitHub Pages!
-                this.myClientId = 'pizda-client-' + Math.random().toString(36).substring(2, 10);
-
-                this.setStatus(`Подключение к комнате ${code}...`);
-
-                // 1. Подключаемся через WebSocket-комнату (без CORS и 403)
                 this.connectWssRoom(() => {
-                    this.publishMqtt({
+                    this.setStatus(`Почти готово! Синхронизация мира ${code}...`);
+                    this.publishEvent({
                         type: 'hello',
                         nick: this.nickname,
                         peerId: this.myClientId
                     });
 
-                    // Повторный запрос инициализации мира, если Хост ещё прогружается
+                    // Повторный запрос, если Хост в этот момент прогружал чанки
                     setTimeout(() => {
                         if (!this.worldReceived && this.roomCode) {
-                            this.publishMqtt({
+                            this.publishEvent({
                                 type: 'hello',
                                 nick: this.nickname,
                                 peerId: this.myClientId
                             });
                         }
-                    }, 1800);
-                });
-
-                // 2. Параллельно пробуем P2P соединение с явным строковым ID (без обращения к /peerjs/id)
-                if (typeof Peer !== 'undefined') {
-                    try {
-                        this.peer = new Peer(this.myClientId, {
-                            config: {
-                                iceServers: [
-                                    { urls: 'stun:stun.l.google.com:19302' },
-                                    { urls: 'stun:stun1.l.google.com:19302' }
-                                ]
-                            }
-                        });
-
-                        this.peer.on('open', () => {
-                            const conn = this.peer.connect(code, { reliable: true });
-                            this.setupConnection(conn);
-                        });
-
-                        this.peer.on('error', () => {
-                            // Игнорируем ошибку брокера PeerJS, так как работает основной WSS-канал
-                        });
-                    } catch (e) {}
-                }
-            }
-
-            setupConnection(conn) {
-                conn.on('open', () => {
-                    this.connections.set(conn.peer, conn);
-                    this.updateHudStatus();
-
-                    conn.send({
-                        type: 'hello',
-                        nick: this.nickname,
-                        peerId: this.myClientId
-                    });
-
-                    if (this.isHost) {
-                        const mods = Array.from(modifiedBlocksHistory.entries());
-                        conn.send({
-                            type: 'world_init',
-                            seedString: worldSettings.seedString,
-                            terrainType: worldSettings.terrainType,
-                            radius: worldSettings.radius,
-                            timeIdx: currentTimeIdx,
-                            hostNick: this.nickname,
-                            hostPeerId: this.myClientId,
-                            mods
-                        });
-                    }
-                });
-
-                conn.on('data', (data) => {
-                    this.handlePacket(conn, data);
-                });
-
-                conn.on('close', () => {
-                    const rp = this.remotePlayers.get(conn.peer);
-                    if (rp) {
-                        this.addChatMessage('', `${rp.nick} покинул игру`, '#FFAA00');
-                    }
-                    this.removeRemotePlayer(conn.peer);
+                    }, 1500);
+                }, () => {
+                    this.setStatus('Ошибка подключения к WSS-серверу', true);
                 });
             }
 
-            handlePacket(conn, data) {
+            handlePacket(data) {
                 if (!data || !data.type) return;
-                const senderPeerId = data.peerId || data.senderId || (conn ? conn.peer : null);
+                const senderPeerId = data.peerId || data.senderId;
                 if (senderPeerId === this.myClientId) return;
 
                 switch (data.type) {
+                    case 'webrtc_signal': {
+                        if (data.targetPeerId === this.myClientId) {
+                            this.handleWebRtcSignal(data);
+                        }
+                        break;
+                    }
+
                     case 'hello': {
                         const isNewPlayer = !this.remotePlayers.has(senderPeerId);
                         const rp = this.ensureRemotePlayer(senderPeerId, data.nick);
@@ -2756,9 +2824,12 @@
                             this.addChatMessage('', `${rp.nick} присоединился к миру!`, '#FFFF55');
                         }
 
+                        // Устанавливаем прямой быстрый WebRTC DataChannel с новым игроком
+                        this.initiateWebRtcConnection(senderPeerId, true);
+
                         if (this.isHost) {
-                            const mods = Array.from(modifiedBlocksHistory.entries());
-                            const initPacket = {
+                            this.publishRetainedWorldState();
+                            this.publishEvent({
                                 type: 'world_init',
                                 targetPeerId: senderPeerId,
                                 seedString: worldSettings.seedString,
@@ -2767,12 +2838,8 @@
                                 timeIdx: currentTimeIdx,
                                 hostNick: this.nickname,
                                 hostPeerId: this.myClientId,
-                                mods
-                            };
-                            if (conn && conn.open) {
-                                conn.send(initPacket);
-                            }
-                            this.publishMqtt(initPacket);
+                                mods: Array.from(modifiedBlocksHistory.entries())
+                            });
                         }
                         break;
                     }
@@ -2782,7 +2849,7 @@
                         if (data.targetPeerId && data.targetPeerId !== this.myClientId) break;
 
                         this.worldReceived = true;
-                        worldSettings.seedString = data.seedString;
+                        worldSettings.seedString = data.seedString || 'PIZDACRAFT-2026';
                         worldSettings.terrainType = data.terrainType || 0;
                         worldSettings.radius = data.radius || 24;
                         generateWorld();
@@ -2807,11 +2874,18 @@
                             this.ensureRemotePlayer(data.hostPeerId, data.hostNick);
                         }
 
+                        // Сообщаем Хосту и всем игрокам, что мы вошли в мир
+                        this.publishEvent({
+                            type: 'hello',
+                            nick: this.nickname,
+                            peerId: this.myClientId
+                        });
+
                         document.getElementById('hud-room-code').textContent = this.roomCode;
                         document.getElementById('hud-room-box').classList.remove('hidden');
                         this.updateHudStatus();
                         startGameSession();
-                        this.addChatMessage('', `Подключено к комнате ${this.roomCode}!`, '#55FF55');
+                        this.addChatMessage('', `Подключено к серверу ${this.roomCode}!`, '#55FF55');
                         break;
                     }
 
@@ -2822,12 +2896,6 @@
                             rp.targetYaw = data.yaw || 0;
                             rp.targetPitch = data.pitch || 0;
                             rp.lastSeen = performance.now();
-                        }
-
-                        if (this.isHost && conn) {
-                            this.connections.forEach((c, pid) => {
-                                if (pid !== conn.peer && c.open) c.send({ ...data, peerId: senderPeerId });
-                            });
                         }
                         break;
                     }
@@ -2857,14 +2925,21 @@
                 }
             }
 
-            broadcast(packet, excludePeerId = null) {
-                const enriched = { ...packet, peerId: this.myClientId };
-                this.publishMqtt(enriched);
-                this.connections.forEach((conn, pid) => {
-                    if (pid !== excludePeerId && conn.open) {
-                        conn.send(enriched);
+            broadcast(packet, reliable = true) {
+                const enriched = { ...packet, peerId: this.myClientId, senderId: this.myClientId };
+                const jsonStr = JSON.stringify(enriched);
+
+                // Отправляем по прямому WebRTC DataChannel всем пирам, с которыми открыт быстрый канал
+                this.rtcChannels.forEach((ch) => {
+                    if (ch.readyState === 'open') {
+                        try { ch.send(jsonStr); } catch (e) {}
                     }
                 });
+
+                // Дублируем через WSS MQTT для надёжности и игроков за симметричным NAT
+                if (reliable || this.rtcChannels.size === 0 || this.rtcChannels.size < this.remotePlayers.size) {
+                    this.publishEvent(enriched);
+                }
             }
 
             broadcastBlockUpdate(x, y, z, id) {
@@ -2872,7 +2947,10 @@
                 this.broadcast({
                     type: 'block',
                     x, y, z, id
-                });
+                }, true);
+                if (this.isHost) {
+                    this.publishRetainedWorldState();
+                }
             }
 
             sendChat(text) {
@@ -2888,7 +2966,7 @@
                         sender: this.nickname,
                         text: clean,
                         color: '#FFFFFF'
-                    });
+                    }, true);
                 }
             }
 
@@ -2906,7 +2984,7 @@
                             z: Number(player.pos.z.toFixed(2)),
                             yaw: Number(player.yaw.toFixed(3)),
                             pitch: Number(player.pitch.toFixed(3))
-                        });
+                        }, false);
                     }
                 }
 
