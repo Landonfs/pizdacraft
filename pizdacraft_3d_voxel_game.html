@@ -1,0 +1,3406 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PIZDACRAFT — Alpha 1.2.6</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.4/mqtt.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --mc-text-shadow: 2px 2px 0px #242424;
+            --mc-yellow: #FFFF00;
+            --mc-hover-text: #FFFFA0;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #111;
+            font-family: 'Press Start 2P', monospace;
+            color: #FFFFFF;
+        }
+
+        /* Базовые утилиты разметки вместо Tailwind CDN */
+        .hidden { display: none !important; }
+        .fixed-inset {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+        }
+        .flex-col { display: flex; flex-direction: column; }
+        .flex-row { display: flex; flex-direction: row; }
+        .items-center { align-items: center; }
+        .items-start { align-items: flex-start; }
+        .items-end { align-items: flex-end; }
+        .justify-between { justify-content: space-between; }
+        .justify-center { justify-content: center; }
+        .flex-wrap { flex-wrap: wrap; }
+        .gap-1 { gap: 4px; }
+        .gap-2 { gap: 8px; }
+        .gap-3 { gap: 12px; }
+        .gap-4 { gap: 16px; }
+        .w-full { width: 100%; }
+        .text-center { text-align: center; }
+        .pointer-none { pointer-events: none; }
+        .pointer-auto { pointer-events: auto; }
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            width: 100%;
+        }
+
+        #game-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+            display: block;
+        }
+
+        .mc-font {
+            font-family: 'Press Start 2P', monospace;
+            text-shadow: 2px 2px 0px #202020;
+            letter-spacing: 0.5px;
+        }
+
+        .mc-font-sm {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 11px;
+            text-shadow: 2px 2px 0px #1a1a1a;
+            line-height: 1.5;
+        }
+
+        /* Классический логотип PIZDACRAFT в стиле каменных букв */
+        .mc-logo-wrapper {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 18px;
+            text-align: center;
+        }
+
+        .mc-logo {
+            font-family: 'Press Start 2P', monospace;
+            font-size: clamp(26px, 5vw, 52px);
+            color: #d6d6d6;
+            letter-spacing: 3px;
+            line-height: 1.1;
+            text-transform: uppercase;
+            text-shadow:
+                0px 2px 0px #9e9e9e,
+                0px 4px 0px #757575,
+                2px 4px 0px #575757,
+                4px 6px 0px #3b3b3b,
+                4px 8px 0px #1b1b1b,
+                6px 10px 0px #000000,
+                -2px -2px 0px #424242,
+                2px -2px 0px #424242,
+                -2px 2px 0px #111111;
+            transform: perspective(400px) rotateX(10deg);
+        }
+
+        .mc-logo-subtitle {
+            font-family: 'Press Start 2P', monospace;
+            font-size: clamp(10px, 1.5vw, 13px);
+            color: #a8a8a8;
+            text-shadow: 2px 2px 0px #181818;
+            margin-top: 8px;
+            letter-spacing: 2px;
+        }
+
+        .mc-splash {
+            position: absolute;
+            right: -28px;
+            bottom: -6px;
+            color: #FFFF00;
+            font-family: 'Press Start 2P', monospace;
+            font-size: clamp(9px, 1.3vw, 12px);
+            text-shadow: 2px 2px 0px #3f3f00;
+            transform: rotate(-18deg);
+            animation: splashPulse 0.55s infinite alternate ease-in-out;
+            white-space: nowrap;
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        @keyframes splashPulse {
+            0% { transform: rotate(-18deg) scale(0.94); }
+            100% { transform: rotate(-18deg) scale(1.06); }
+        }
+
+        /* Классическая каменная кнопка Minecraft */
+        .mc-btn {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 44px;
+            padding: 0 14px;
+            background-color: #727272;
+            background-size: 64px 64px;
+            background-repeat: repeat;
+            border: 2px solid #000000;
+            box-shadow:
+                inset 3px 3px 0px rgba(255, 255, 255, 0.38),
+                inset -3px -3px 0px rgba(0, 0, 0, 0.55);
+            color: #E0E0E0;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 12px;
+            text-shadow: 2px 2px 0px #282828;
+            cursor: pointer;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        .mc-btn-sm {
+            width: auto;
+            height: 36px;
+            padding: 0 12px;
+            font-size: 10px;
+        }
+
+        .mc-btn:hover:not(:disabled) {
+            background-color: #7e88bf;
+            background-blend-mode: multiply;
+            color: #FFFFA0;
+            border-color: #FFFFFF;
+            box-shadow:
+                inset 3px 3px 0px rgba(255, 255, 255, 0.5),
+                inset -3px -3px 0px rgba(30, 35, 75, 0.7),
+                0 0 0 2px #000000;
+        }
+
+        .mc-btn:active:not(:disabled) {
+            box-shadow:
+                inset -3px -3px 0px rgba(255, 255, 255, 0.25),
+                inset 3px 3px 0px rgba(0, 0, 0, 0.65);
+            padding-top: 2px;
+        }
+
+        .mc-dirt-panel {
+            background-color: #3b2818;
+            background-size: 64px 64px;
+            background-repeat: repeat;
+            border: 4px solid #1a120b;
+            box-shadow:
+                inset 4px 4px 0px rgba(255, 255, 255, 0.12),
+                inset -4px -4px 0px rgba(0, 0, 0, 0.65),
+                0 12px 0 rgba(0, 0, 0, 0.45);
+            padding: 18px;
+        }
+
+        .mc-input {
+            width: 100%;
+            height: 40px;
+            background-color: #000000;
+            border: 2px solid #A0A0A0;
+            box-shadow: inset 2px 2px 0px #222222;
+            color: #FFFFFF;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 11px;
+            padding: 0 12px;
+            outline: none;
+        }
+
+        .mc-input:focus {
+            border-color: #FFFFA0;
+        }
+
+        .mc-slider-container {
+            position: relative;
+            width: 100%;
+            height: 42px;
+            background-color: #333333;
+            border: 2px solid #000000;
+            box-shadow: inset 2px 2px 0px rgba(0, 0, 0, 0.75);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mc-slider-input {
+            -webkit-appearance: none;
+            appearance: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            margin: 0;
+            cursor: pointer;
+            z-index: 3;
+        }
+
+        .mc-slider-input::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 38px;
+            background-color: #7c7c7c;
+            border: 2px solid #000000;
+            box-shadow:
+                inset 2px 2px 0px rgba(255,255,255,0.4),
+                inset -2px -2px 0px rgba(0,0,0,0.6);
+        }
+
+        .mc-slider-input:hover::-webkit-slider-thumb {
+            background-color: #939dd4;
+            border-color: #FFFFFF;
+        }
+
+        .mc-slider-label {
+            position: relative;
+            z-index: 2;
+            pointer-events: none;
+            font-size: 10px;
+            color: #E5E5E5;
+            text-shadow: 2px 2px 0px #181818;
+        }
+
+        .mc-hotbar {
+            display: flex;
+            background-color: #373737;
+            border: 3px solid #0e0e0e;
+            box-shadow: inset 2px 2px 0px #5a5a5a, inset -2px -2px 0px #1f1f1f;
+            padding: 2px;
+            gap: 2px;
+        }
+
+        .mc-slot {
+            width: 48px;
+            height: 48px;
+            background-color: #8b8b8b;
+            border: 3px solid;
+            border-color: #373737 #ffffff #ffffff #373737;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .mc-slot.active {
+            outline: 3px solid #f4f4f4;
+            box-shadow: 0 0 0 5px #141414, inset 0 0 0 2px #d8d8d8;
+            z-index: 5;
+            transform: scale(1.06);
+        }
+
+        .mc-slot-key {
+            position: absolute;
+            top: 2px;
+            left: 3px;
+            font-size: 8px;
+            color: #dddddd;
+            text-shadow: 1px 1px 0px #000;
+            pointer-events: none;
+        }
+
+        .mc-crosshair {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 20;
+        }
+
+        .mc-crosshair::before,
+        .mc-crosshair::after {
+            content: '';
+            position: absolute;
+            background-color: rgba(255, 255, 255, 0.88);
+            box-shadow: 1px 1px 0px rgba(0, 0, 0, 0.75);
+        }
+
+        .mc-crosshair::before {
+            top: 8px;
+            left: 0;
+            width: 20px;
+            height: 3px;
+        }
+
+        .mc-crosshair::after {
+            top: 0;
+            left: 8px;
+            width: 3px;
+            height: 20px;
+        }
+
+        .panorama-vignette {
+            background: radial-gradient(circle, rgba(20, 20, 20, 0.15) 0%, rgba(10, 10, 10, 0.68) 100%);
+        }
+
+        .mc-heart {
+            width: 16px;
+            height: 16px;
+            display: inline-block;
+        }
+
+        #hotbar-item-label {
+            transition: opacity 0.4s ease;
+        }
+
+        #underwater-overlay {
+            background: radial-gradient(circle, rgba(18, 62, 145, 0.48) 0%, rgba(8, 28, 82, 0.75) 100%);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .menu-center-container {
+            width: 100%;
+            max-width: 460px;
+            margin: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .dark-box {
+            background: rgba(0, 0, 0, 0.55);
+            border: 1px solid #000;
+            padding: 10px 12px;
+        }
+
+        /* Текст цветов */
+        .txt-yellow { color: #FFFF55; }
+        .txt-green { color: #55FF55; }
+        .txt-cyan { color: #55FFFF; }
+        .txt-red { color: #FF5555; }
+        .txt-gray { color: #CCCCCC; }
+    </style>
+</head>
+<body>
+
+    <!-- 3D СЦЕНА (Панорама в меню + Игровой мир) -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- ПОДВОДНЫЙ ЭФФЕКТ ПРИ ПОГРУЖЕНИИ КАМЕРЫ В ВОДУ -->
+    <div id="underwater-overlay" class="hidden fixed-inset"></div>
+
+    <!-- ===================== ГЛАВНОЕ МЕНЮ ===================== -->
+    <div id="main-menu-overlay" class="fixed-inset flex-col justify-between panorama-vignette" style="z-index: 30; padding: 18px;">
+        <!-- Верхняя панель -->
+        <div class="flex-row justify-between items-start flex-wrap gap-2">
+            <div class="mc-font-sm dark-box flex-col gap-1">
+                <span>PIZDACRAFT Alpha 1.2.6 (Multiplayer & Water Update)</span>
+                <span id="cdn-sound-status" style="font-size: 9px;" class="txt-green">✔ Аудиосистема Minecraft 1.20.4 готова</span>
+                <span id="music-now-playing" style="font-size: 9px;" class="txt-yellow">♪ C418: Кликните в любом месте для старта музыки</span>
+            </div>
+            <div class="flex-row gap-2 flex-wrap">
+                <button id="menu-music-toggle" class="mc-btn mc-btn-sm">
+                    Музыка: ВКЛ
+                </button>
+                <button id="menu-music-next" class="mc-btn mc-btn-sm" title="Следующий трек C418 (клавиша M)">
+                    Трек ⏭
+                </button>
+                <button id="menu-sound-toggle" class="mc-btn mc-btn-sm">
+                    Звук: ВКЛ
+                </button>
+            </div>
+        </div>
+
+        <!-- Центральный блок с логотипом и кнопками -->
+        <div class="menu-center-container">
+            <!-- Логотип -->
+            <div class="mc-logo-wrapper">
+                <div class="mc-logo">PIZDACRAFT</div>
+                <div class="mc-logo-subtitle">ВОКСЕЛЬНОЕ ИЗДАНИЕ</div>
+                <div id="splash-text" class="mc-splash" title="Нажми, чтобы сменить сплэш!">Физика воды и C418!</div>
+            </div>
+
+            <!-- Основные кнопки меню -->
+            <div id="menu-main-buttons" class="w-full flex-col gap-2" style="margin-top: 14px;">
+                <button id="btn-quick-play" class="mc-btn">
+                    Одиночная игра
+                </button>
+                <button id="btn-open-multiplayer" class="mc-btn">
+                    Сетевая игра (Мультиплеер)
+                </button>
+                <button id="btn-open-world-create" class="mc-btn">
+                    Создать новый мир...
+                </button>
+                <button id="btn-open-settings" class="mc-btn">
+                    Настройки...
+                </button>
+                <div class="grid-2" style="padding-top: 4px;">
+                    <button id="btn-open-controls" class="mc-btn" style="font-size: 10px;">
+                        Управление
+                    </button>
+                    <button id="btn-regenerate-panorama" class="mc-btn" style="font-size: 10px;">
+                        Новый фон-мир
+                    </button>
+                </div>
+            </div>
+
+            <!-- ОКНО СЕТЕВОЙ ИГРЫ (МУЛЬТИПЛЕЕР ГИБРИДНЫЙ WSS + PEERJS) -->
+            <div id="menu-multiplayer" class="hidden w-full mc-dirt-panel flex-col gap-3" style="max-height: 78vh; overflow-y: auto;">
+                <h2 class="mc-font text-center txt-yellow" style="font-size: 13px; margin: 0;">Сетевая игра (WSS + P2P)</h2>
+                <p class="mc-font-sm txt-gray text-center" style="font-size: 9px; margin: 0;">
+                    Работает на GitHub Pages без ошибок CORS/403 через чистый WebSocket + P2P!
+                </p>
+
+                <div>
+                    <label class="mc-font-sm txt-gray" style="font-size: 10px; display: block; margin-bottom: 4px;">Ваш никнейм:</label>
+                    <input id="input-mp-nick" type="text" class="mc-input" maxlength="16" value="Steve">
+                </div>
+
+                <!-- Блок создания сервера (Хост) -->
+                <div class="dark-box flex-col gap-2">
+                    <div class="mc-font-sm txt-green" style="font-size: 10px;">1. Стать Хостом (Создать комнату)</div>
+                    <p class="mc-font-sm txt-gray" style="font-size: 9px; margin: 0;">
+                        Создайте мир, получите короткий код комнаты (например <span class="txt-yellow">PIZDA-4821</span>) и отправьте его другу.
+                    </p>
+                    <button id="btn-mp-host" class="mc-btn" style="height: 38px; font-size: 11px;">
+                        Создать сервер (Хост)
+                    </button>
+                </div>
+
+                <!-- Блок подключения к другу -->
+                <div class="dark-box flex-col gap-2">
+                    <div class="mc-font-sm txt-cyan" style="font-size: 10px;">2. Подключиться к другу по коду</div>
+                    <div class="flex-row gap-2">
+                        <input id="input-mp-code" type="text" class="mc-input" style="text-transform: uppercase;" placeholder="PIZDA-1234" maxlength="18">
+                        <button id="btn-mp-join" class="mc-btn" style="width: 130px;">
+                            Войти
+                        </button>
+                    </div>
+                </div>
+
+                <div id="mp-menu-status" class="mc-font-sm txt-yellow text-center" style="font-size: 9px; min-height: 16px;"></div>
+
+                <button id="btn-close-multiplayer" class="mc-btn" style="height: 38px;">
+                    Назад в меню
+                </button>
+            </div>
+
+            <!-- ОКНО СОЗДАНИЯ НОВОГО МИРА -->
+            <div id="menu-world-create" class="hidden w-full mc-dirt-panel flex-col gap-3">
+                <h2 class="mc-font text-center txt-yellow" style="font-size: 13px; margin: 0;">Создание нового мира</h2>
+
+                <div>
+                    <label class="mc-font-sm txt-gray" style="display: block; margin-bottom: 6px;">Название мира:</label>
+                    <input id="input-world-name" type="text" class="mc-input" value="Новый Мир" maxlength="24">
+                </div>
+
+                <div>
+                    <label class="mc-font-sm txt-gray" style="display: block; margin-bottom: 6px;">Зерно мира (Сид для генератора):</label>
+                    <div class="flex-row gap-2">
+                        <input id="input-world-seed" type="text" class="mc-input" placeholder="Случайный сид" value="PIZDACRAFT-2026">
+                        <button id="btn-random-seed" class="mc-btn" style="width: 52px; height: 40px;" title="Случайный сид">🎲</button>
+                    </div>
+                </div>
+
+                <button id="btn-world-type" class="mc-btn" style="font-size: 10px;">
+                    Рельеф: Классика (Холмы, дубы и озёра)
+                </button>
+
+                <div class="grid-2" style="padding-top: 6px;">
+                    <button id="btn-start-custom-world" class="mc-btn">
+                        Создать мир
+                    </button>
+                    <button id="btn-cancel-world-create" class="mc-btn">
+                        Отмена
+                    </button>
+                </div>
+            </div>
+
+            <!-- ОКНО НАСТРОЕК -->
+            <div id="menu-settings" class="hidden w-full mc-dirt-panel flex-col gap-3">
+                <h2 class="mc-font text-center txt-yellow" style="font-size: 13px; margin: 0;">Настройки игры</h2>
+
+                <div class="mc-slider-container">
+                    <input id="slider-fov" type="range" min="60" max="110" value="78" class="mc-slider-input">
+                    <span id="label-fov" class="mc-slider-label">Поле зрения (FOV): 78°</span>
+                </div>
+
+                <div class="mc-slider-container">
+                    <input id="slider-radius" type="range" min="16" max="36" step="4" value="24" class="mc-slider-input">
+                    <span id="label-radius" class="mc-slider-label">Дальность мира: Средняя (48x48)</span>
+                </div>
+
+                <div class="mc-slider-container">
+                    <input id="slider-sens" type="range" min="1" max="10" step="1" value="5" class="mc-slider-input">
+                    <span id="label-sens" class="mc-slider-label">Чувствительность мыши: 100%</span>
+                </div>
+
+                <div class="mc-slider-container">
+                    <input id="slider-volume" type="range" min="0" max="100" step="5" value="80" class="mc-slider-input">
+                    <span id="label-volume" class="mc-slider-label">Громкость звуков: 80%</span>
+                </div>
+
+                <button id="btn-setting-time" class="mc-btn" style="font-size: 10px;">
+                    Время суток: Солнечный день
+                </button>
+
+                <button id="btn-close-settings" class="mc-btn" style="margin-top: 4px;">
+                    Готово
+                </button>
+            </div>
+
+            <!-- ОКНО УПРАВЛЕНИЯ -->
+            <div id="menu-controls" class="hidden w-full mc-dirt-panel flex-col gap-3">
+                <h2 class="mc-font text-center txt-yellow" style="font-size: 13px; margin: 0;">Управление</h2>
+                <div class="mc-font-sm dark-box flex-col gap-2" style="font-size: 10px;">
+                    <div class="flex-row justify-between"><span>W, A, S, D</span><span class="txt-yellow">Ходьба / Плавание</span></div>
+                    <div class="flex-row justify-between"><span>ПРОБЕЛ</span><span class="txt-yellow">Прыжок / Всплытие в воде</span></div>
+                    <div class="flex-row justify-between"><span>ЛКМ / ПКМ</span><span class="txt-yellow">Ломать / Ставить блок и воду</span></div>
+                    <div class="flex-row justify-between"><span>Слот 9</span><span class="txt-yellow">Ведро воды (источник)</span></div>
+                    <div class="flex-row justify-between"><span>F</span><span class="txt-yellow">Режим полёта</span></div>
+                    <div class="flex-row justify-between"><span>M</span><span class="txt-yellow">Следующий трек C418</span></div>
+                    <div class="flex-row justify-between"><span>N</span><span class="txt-yellow">Смена дня и ночи</span></div>
+                    <div class="flex-row justify-between"><span>ENTER или C</span><span class="txt-yellow">Чат мультиплеера</span></div>
+                    <div class="flex-row justify-between"><span>ESC</span><span class="txt-yellow">Пауза / Меню</span></div>
+                </div>
+                <button id="btn-close-controls" class="mc-btn">
+                    Понятно
+                </button>
+            </div>
+        </div>
+
+        <!-- Нижняя строка копирайта -->
+        <div class="flex-row justify-between items-center flex-wrap gap-2 mc-font txt-gray" style="font-size: 10px;">
+            <span>PIZDACRAFT Engine (Three.js r128)</span>
+            <span>Не является официальным продуктом Mojang.</span>
+        </div>
+    </div>
+
+    <!-- ===================== ИГРОВОЙ ИНТЕРФЕЙС (HUD) ===================== -->
+    <div id="game-hud" class="hidden fixed-inset pointer-none" style="z-index: 20;">
+        <!-- Прицел -->
+        <div class="mc-crosshair"></div>
+
+        <!-- Верхняя панель подсказок и F3 отладки -->
+        <div class="flex-row justify-between items-start" style="padding: 12px;">
+            <!-- Левая панель отладки F3 -->
+            <div id="debug-panel" class="mc-font-sm dark-box flex-col gap-1">
+                <div class="txt-yellow">PIZDACRAFT 1.2.6 (<span id="hud-fps">60</span> FPS)</div>
+                <div>XYZ: <span id="hud-coords">0.0 / 0.0 / 0.0</span></div>
+                <div>Мир: <span id="hud-world-name">Новый Мир</span> [Сид: <span id="hud-seed">0</span>]</div>
+                <div>Режим: <span id="hud-fly-state" class="txt-green">Выживание (Ходьба)</span></div>
+                <div id="hud-mp-bar" class="txt-cyan">Сеть: Одиночная игра</div>
+                <div id="hud-music-bar" class="txt-green" style="font-size: 9px;">♪ Музыка: ожидание...</div>
+                <div class="txt-gray" style="font-size: 9px; padding-top: 2px;">[F] Полёт | [M] Трек | [N] Время | [Enter] Чат</div>
+            </div>
+
+            <!-- Кнопка паузы и управления музыкой/сетью -->
+            <div class="pointer-auto flex-col items-end gap-2">
+                <div class="flex-row gap-2">
+                    <button id="btn-hud-next-track" class="mc-btn mc-btn-sm" title="Следующий трек C418 (M)">
+                        ♪ Трек ⏭
+                    </button>
+                    <button id="btn-hud-time" class="mc-btn mc-btn-sm">
+                        ☀ День
+                    </button>
+                    <button id="btn-hud-pause" class="mc-btn mc-btn-sm">
+                        II Пауза
+                    </button>
+                </div>
+                <!-- Панель кода комнаты в мультиплеере -->
+                <div id="hud-room-box" class="hidden dark-box flex-row items-center gap-2">
+                    <span class="mc-font-sm txt-yellow" style="font-size: 10px;">Код комнаты: <strong id="hud-room-code">PIZDA-0000</strong></span>
+                    <button id="btn-copy-room" class="mc-btn mc-btn-sm" style="height: 26px; font-size: 9px;">Копировать</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ЧАТ МУЛЬТИПЛЕЕРА (слева внизу) -->
+        <div class="flex-col gap-1 pointer-none" style="position: absolute; bottom: 96px; left: 12px; width: 340px;">
+            <div id="chat-messages" class="flex-col gap-1 mc-font-sm" style="max-height: 170px; overflow: hidden; font-size: 10px;"></div>
+            <div id="chat-input-row" class="hidden pointer-auto flex-row gap-1">
+                <input id="chat-input" type="text" class="mc-input" style="height: 32px; font-size: 10px;" maxlength="100" placeholder="Сообщение в чат (Enter — отправить)...">
+            </div>
+        </div>
+
+        <!-- Нижняя часть: Сердечки, Название блока и Хотбар -->
+        <div class="flex-col items-center pointer-auto" style="position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);">
+            <div id="hotbar-item-label" class="mc-font dark-box" style="font-size: 11px; margin-bottom: 8px; padding: 4px 10px;">
+                Блок дёрна
+            </div>
+
+            <div class="w-full flex-row justify-between items-center" style="margin-bottom: 6px; padding: 0 4px;">
+                <div id="hearts-row" class="flex-row gap-1"></div>
+                <div id="armor-row" class="flex-row gap-1"></div>
+            </div>
+
+            <div id="hotbar-container" class="mc-hotbar"></div>
+        </div>
+    </div>
+
+    <!-- ===================== МЕНЮ ПАУЗЫ ===================== -->
+    <div id="pause-overlay" class="hidden fixed-inset flex-col items-center justify-center" style="z-index: 40; background: rgba(0, 0, 0, 0.72); padding: 16px;">
+        <div class="flex-col items-center gap-3" style="width: 100%; max-width: 420px;">
+            <h2 class="mc-font" style="font-size: 18px; margin-bottom: 12px;">Меню игры</h2>
+
+            <button id="btn-resume-game" class="mc-btn">
+                Вернуться к игре
+            </button>
+
+            <div class="grid-2">
+                <button id="btn-pause-fly" class="mc-btn" style="font-size: 10px;">
+                    Полёт: ВЫКЛ
+                </button>
+                <button id="btn-pause-time" class="mc-btn" style="font-size: 10px;">
+                    Сменить время
+                </button>
+            </div>
+
+            <button id="btn-respawn" class="mc-btn">
+                Телепорт на спавн
+            </button>
+
+            <button id="btn-quit-to-title" class="mc-btn" style="margin-top: 10px;">
+                Сохранить и выйти в меню
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /***********************************************************************
+         * 0. ГЛОБАЛЬНЫЕ СТРУКТУРЫ ДАННЫХ МИРА (ОБЪЯВЛЕНЫ В НАЧАЛЕ БЕЗ ОШИБОК)
+         ***********************************************************************/
+        const worldData = new Map();             // "x,y,z" -> blockId
+        const activeWaterFrontier = new Map();   // "x,y,z" -> remainingSpread (0..5)
+        const modifiedBlocksHistory = new Map(); // "x,y,z" -> blockId (для синхронизации в мультиплеере)
+        const instancedMeshes = new Map();       // blockId -> THREE.InstancedMesh
+        let waterSurfaceMesh = null;             // Единый меш воды без полос и внутренних швов
+
+        const TERRAIN_TYPES = [
+            'Классика (Холмы, дубы и озёра)',
+            'Тропические острова и архипелаги',
+            'Высокогорье и глубокие каньоны'
+        ];
+
+        const worldSettings = {
+            name: 'Новый Мир',
+            seedString: 'PIZDACRAFT-2026',
+            numericSeed: 2026,
+            radius: 24,
+            terrainType: 0
+        };
+
+        /***********************************************************************
+         * 1. ЗВУКОВОЙ МЕНЕДЖЕР И МУЗЫКА C418 (ЗАГРУЗКА В BLOB БЕЗ QUIC TIMEOUT)
+         ***********************************************************************/
+        class MinecraftSoundManager {
+            constructor() {
+                this.enabled = true;
+                this.musicEnabled = true;
+                this.volume = 0.8;
+
+                // Несколько быстрых CDN-зеркал (jsDelivr первым, чтобы избегать QUIC_NETWORK_IDLE_TIMEOUT на mcasset.cloud)
+                this.cdnMirrors120 = [
+                    'https://cdn.jsdelivr.net/gh/InventivetalentDev/minecraft-assets@1.20.4/assets/minecraft/sounds/',
+                    'https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.20.4/assets/minecraft/sounds/',
+                    'https://assets.mcasset.cloud/1.20.4/assets/minecraft/sounds/'
+                ];
+                this.cdnMirrors116 = [
+                    'https://cdn.jsdelivr.net/gh/InventivetalentDev/minecraft-assets@1.16.5/assets/minecraft/sounds/',
+                    'https://assets.mcasset.cloud/1.16.5/assets/minecraft/sounds/'
+                ];
+
+                // Кэш локальных Blob-ссылок в оперативной памяти (предотвращает обрывы стриминга по QUIC)
+                this.blobUrlCache = new Map();
+                this.inFlightLoads = new Map();
+
+                // Оригинальные композиции C418
+                this.musicTracks = [
+                    { file120: 'music/game/minecraft.ogg',         file116: 'music/game/calm1.ogg',  title: 'C418 — Minecraft' },
+                    { file120: 'music/game/clark.ogg',             file116: 'music/game/calm2.ogg',  title: 'C418 — Clark' },
+                    { file120: 'music/game/sweden.ogg',            file116: 'music/game/calm3.ogg',  title: 'C418 — Sweden' },
+                    { file120: 'music/game/subwoofer_lullaby.ogg', file116: 'music/game/hal1.ogg',   title: 'C418 — Subwoofer Lullaby' },
+                    { file120: 'music/game/living_mice.ogg',       file116: 'music/game/hal2.ogg',   title: 'C418 — Living Mice' },
+                    { file120: 'music/game/haggstrom.ogg',         file116: 'music/game/hal3.ogg',   title: 'C418 — Haggstrom' },
+                    { file120: 'music/game/dry_hands.ogg',         file116: 'music/game/piano1.ogg', title: 'C418 — Dry Hands' },
+                    { file120: 'music/game/wet_hands.ogg',         file116: 'music/game/piano2.ogg', title: 'C418 — Wet Hands' }
+                ];
+                this.currentTrackIndex = Math.floor(Math.random() * this.musicTracks.length);
+                this.bgmAudio = null;
+                this.musicStartedOnce = false;
+                this.musicLoadToken = 0;
+
+                // Звуковые эффекты
+                this.soundBank = {
+                    click: ['random/click.ogg'],
+                    splash: ['liquid/splash.ogg', 'liquid/splash2.ogg'],
+                    swim: ['liquid/swim1.ogg', 'liquid/swim2.ogg', 'liquid/swim3.ogg', 'liquid/swim4.ogg'],
+                    dig_grass: ['dig/grass1.ogg', 'dig/grass2.ogg', 'dig/grass3.ogg', 'dig/grass4.ogg'],
+                    dig_gravel: ['dig/gravel1.ogg', 'dig/gravel2.ogg', 'dig/gravel3.ogg', 'dig/gravel4.ogg'],
+                    dig_stone: ['dig/stone1.ogg', 'dig/stone2.ogg', 'dig/stone3.ogg', 'dig/stone4.ogg'],
+                    dig_wood: ['dig/wood1.ogg', 'dig/wood2.ogg', 'dig/wood3.ogg', 'dig/wood4.ogg'],
+                    dig_sand: ['dig/sand1.ogg', 'dig/sand2.ogg', 'dig/sand3.ogg', 'dig/sand4.ogg'],
+                    step_grass: ['step/grass1.ogg', 'step/grass2.ogg', 'step/grass3.ogg', 'step/grass4.ogg'],
+                    step_gravel: ['step/gravel1.ogg', 'step/gravel2.ogg', 'step/gravel3.ogg', 'step/gravel4.ogg'],
+                    step_stone: ['step/stone1.ogg', 'step/stone2.ogg', 'step/stone3.ogg', 'step/stone4.ogg'],
+                    step_wood: ['step/wood1.ogg', 'step/wood2.ogg', 'step/wood3.ogg', 'step/wood4.ogg'],
+                    step_sand: ['step/sand1.ogg', 'step/sand2.ogg', 'step/sand3.ogg', 'step/sand4.ogg']
+                };
+
+                this.setupAutoMusicUnlock();
+            }
+
+            setupAutoMusicUnlock() {
+                const unlockHandler = () => {
+                    if (!this.musicStartedOnce && this.musicEnabled) {
+                        this.musicStartedOnce = true;
+                        this.playCurrentMusicTrack();
+                    }
+                };
+                window.addEventListener('pointerdown', unlockHandler, { passive: true });
+                window.addEventListener('keydown', unlockHandler, { passive: true });
+            }
+
+            // Скачивание .ogg целиком в локальный Blob URL (полностью исключает QUIC_NETWORK_IDLE_TIMEOUT)
+            async loadAudioBlobUrl(relPath120, fallbackPath116 = null) {
+                if (this.blobUrlCache.has(relPath120)) {
+                    return this.blobUrlCache.get(relPath120);
+                }
+                if (this.inFlightLoads.has(relPath120)) {
+                    return this.inFlightLoads.get(relPath120);
+                }
+
+                const candidateUrls = [];
+                for (const base of this.cdnMirrors120) {
+                    candidateUrls.push(base + relPath120);
+                }
+                if (fallbackPath116) {
+                    for (const base of this.cdnMirrors116) {
+                        candidateUrls.push(base + fallbackPath116);
+                    }
+                }
+
+                const promise = (async () => {
+                    for (const url of candidateUrls) {
+                        try {
+                            const resp = await fetch(url);
+                            if (resp.ok) {
+                                const blob = await resp.blob();
+                                const blobUrl = URL.createObjectURL(blob);
+                                this.blobUrlCache.set(relPath120, blobUrl);
+                                return blobUrl;
+                            }
+                        } catch (e) {
+                            // Переходим к следующему зеркалу CDN
+                        }
+                    }
+                    // Если fetch заблокирован расширением, возвращаем прямую ссылку jsDelivr
+                    return candidateUrls[0];
+                })();
+
+                this.inFlightLoads.set(relPath120, promise);
+                const resultUrl = await promise;
+                this.inFlightLoads.delete(relPath120);
+                return resultUrl;
+            }
+
+            async playFromCategory(category, volumeScale = 1.0, pitchVariation = true) {
+                if (!this.enabled || this.volume <= 0) return;
+                const list = this.soundBank[category];
+                if (!list || list.length === 0) return;
+
+                const relPath = list[Math.floor(Math.random() * list.length)];
+                try {
+                    const srcUrl = await this.loadAudioBlobUrl(relPath);
+                    if (!this.enabled || this.volume <= 0) return;
+
+                    const soundInstance = new Audio(srcUrl);
+                    soundInstance.volume = Math.min(1, Math.max(0, this.volume * volumeScale));
+
+                    if (pitchVariation) {
+                        soundInstance.preservesPitch = false;
+                        soundInstance.playbackRate = 0.9 + Math.random() * 0.2;
+                    }
+
+                    soundInstance.play().catch(() => {});
+                } catch (err) {}
+            }
+
+            getMaterialSoundType(blockId) {
+                switch (blockId) {
+                    case 1:
+                    case 7:
+                        return 'grass';
+                    case 2:
+                        return 'gravel';
+                    case 5:
+                    case 6:
+                        return 'wood';
+                    case 8:
+                        return 'sand';
+                    case 9:
+                        return 'water';
+                    default:
+                        return 'stone';
+                }
+            }
+
+            playClick() {
+                this.playFromCategory('click', 0.65, false);
+            }
+
+            playSplash() {
+                this.playFromCategory('splash', 0.75, true);
+            }
+
+            playSwim() {
+                this.playFromCategory('swim', 0.5, true);
+            }
+
+            playBlockSound(action = 'break', blockId = 1) {
+                if (blockId === 9) {
+                    this.playSplash();
+                    return;
+                }
+                const matType = this.getMaterialSoundType(blockId);
+                const vol = action === 'break' ? 0.95 : 0.8;
+                this.playFromCategory(`dig_${matType}`, vol, true);
+            }
+
+            playStep(blockId = 1) {
+                if (blockId === 9) {
+                    this.playSwim();
+                    return;
+                }
+                const matType = this.getMaterialSoundType(blockId);
+                this.playFromCategory(`step_${matType}`, 0.45, true);
+            }
+
+            // Надёжный плеер музыки C418 из памяти (Blob) без разрывов соединения
+            async playCurrentMusicTrack() {
+                if (!this.musicEnabled) return;
+                const track = this.musicTracks[this.currentTrackIndex];
+                if (!track) return;
+
+                const token = ++this.musicLoadToken;
+
+                if (this.bgmAudio) {
+                    this.bgmAudio.pause();
+                    this.bgmAudio = null;
+                }
+
+                this.updateMusicUI(`Загрузка: ${track.title}...`);
+
+                try {
+                    const blobUrl = await this.loadAudioBlobUrl(track.file120, track.file116);
+                    if (token !== this.musicLoadToken || !this.musicEnabled) return;
+
+                    const audio = new Audio(blobUrl);
+                    audio.volume = Math.min(1, this.volume * 0.48);
+
+                    audio.addEventListener('ended', () => {
+                        this.nextMusicTrack();
+                    });
+
+                    audio.addEventListener('error', () => {
+                        if (token === this.musicLoadToken && this.musicEnabled) {
+                            setTimeout(() => this.nextMusicTrack(), 1500);
+                        }
+                    });
+
+                    this.bgmAudio = audio;
+                    this.updateMusicUI(track.title);
+
+                    await audio.play();
+                    this.musicStartedOnce = true;
+                    this.updateMusicUI(track.title);
+                } catch (err) {
+                    if (token === this.musicLoadToken) {
+                        this.updateMusicUI(`${track.title} (кликните для старта)`);
+                    }
+                }
+            }
+
+            nextMusicTrack() {
+                this.currentTrackIndex = (this.currentTrackIndex + 1) % this.musicTracks.length;
+                if (!this.musicEnabled) {
+                    this.musicEnabled = true;
+                    const btn = document.getElementById('menu-music-toggle');
+                    if (btn) btn.textContent = 'Музыка: ВКЛ';
+                }
+                this.playCurrentMusicTrack();
+            }
+
+            toggleMusic() {
+                this.musicEnabled = !this.musicEnabled;
+                if (this.musicEnabled) {
+                    this.playCurrentMusicTrack();
+                } else {
+                    this.musicLoadToken++;
+                    if (this.bgmAudio) this.bgmAudio.pause();
+                    this.updateMusicUI('Выключена');
+                }
+                return this.musicEnabled;
+            }
+
+            updateMusicUI(text) {
+                const menuEl = document.getElementById('music-now-playing');
+                const hudEl = document.getElementById('hud-music-bar');
+                if (menuEl) menuEl.textContent = `♪ ${text}`;
+                if (hudEl) hudEl.textContent = `♪ ${text}`;
+            }
+
+            setMasterVolume(val) {
+                this.volume = val;
+                if (this.bgmAudio) {
+                    this.bgmAudio.volume = Math.min(1, this.volume * 0.48);
+                }
+            }
+        }
+
+        const sound = new MinecraftSoundManager();
+
+        /***********************************************************************
+         * 2. ГЕНЕРАТОР ПРОЦЕДУРНЫХ ПИКСЕЛЬНЫХ ТЕКСТУР 16x16 (КЛАССИЧЕСКИЙ СТИЛЬ)
+         ***********************************************************************/
+        function createPixelCanvas(width = 16, height = 16) {
+            const c = document.createElement('canvas');
+            c.width = width;
+            c.height = height;
+            return c;
+        }
+
+        function mulberry32(a) {
+            return function() {
+                let t = a += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            };
+        }
+
+        function canvasToThreeTexture(canvas) {
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.magFilter = THREE.NearestFilter;
+            tex.minFilter = THREE.NearestFilter;
+            tex.wrapS = THREE.ClampToEdgeWrapping;
+            tex.wrapT = THREE.ClampToEdgeWrapping;
+            tex.generateMipmaps = false;
+            tex.needsUpdate = true;
+            return tex;
+        }
+
+        const TextureAtlas = {};
+
+        function generateAllBlockTextures() {
+            const rand = mulberry32(1337);
+
+            // 1. Земля (Dirt)
+            const dirtCanvas = createPixelCanvas(16, 16);
+            const dCtx = dirtCanvas.getContext('2d');
+            const dirtPalette = ['#79553a', '#6b4a31', '#866043', '#5c3e28', '#91694b'];
+            for (let y = 0; y < 16; y++) {
+                for (let x = 0; x < 16; x++) {
+                    dCtx.fillStyle = dirtPalette[Math.floor(rand() * dirtPalette.length)];
+                    dCtx.fillRect(x, y, 1, 1);
+                }
+            }
+            TextureAtlas.dirt = canvasToThreeTexture(dirtCanvas);
+            TextureAtlas.dirtDataURL = dirtCanvas.toDataURL();
+
+            // 2. Верх травы (Grass Top)
+            const grassTopCanvas = createPixelCanvas(16, 16);
+            const gtCtx = grassTopCanvas.getContext('2d');
+            const grassPalette = ['#5b9b38', '#528e31', '#66aa41', '#4b832b', '#6eb447'];
+            for (let y = 0; y < 16; y++) {
+                for (let x = 0; x < 16; x++) {
+                    gtCtx.fillStyle = grassPalette[Math.floor(rand() * grassPalette.length)];
+                    gtCtx.fillRect(x, y, 1, 1);
+                }
+            }
+            TextureAtlas.grassTop = canvasToThreeTexture(grassTopCanvas);
+
+            // 3. Бок травы (Grass Side)
+            const grassSideCanvas = createPixelCanvas(16, 16);
+            const gsCtx = grassSideCanvas.getContext('2d');
+            gsCtx.drawImage(dirtCanvas, 0, 0);
+            const bladeHeights = [3, 4, 2, 3, 5, 4, 2, 3, 4, 3, 2, 4, 5, 3, 2, 3];
+            for (let x = 0; x < 16; x++) {
+                const h = bladeHeights[x];
+                for (let y = 0; y < h; y++) {
+                    gsCtx.fillStyle = grassPalette[Math.floor(rand() * grassPalette.length)];
+                    gsCtx.fillRect(x, y, 1, 1);
+                }
+                gsCtx.fillStyle = '#4e3522';
+                gsCtx.fillRect(x, h, 1, 1);
+            }
+            TextureAtlas.grassSide = canvasToThreeTexture(grassSideCanvas);
+            TextureAtlas.grassSideDataURL = grassSideCanvas.toDataURL();
+
+            // 4. Гладкий камень (Stone)
+            const stoneCanvas = createPixelCanvas(16, 16);
+            const stCtx = stoneCanvas.getContext('2d');
+            const stonePalette = ['#7d7d7d', '#737373', '#878787', '#686868', '#8f8f8f'];
+            for (let y = 0; y < 16; y++) {
+                for (let x = 0; x < 16; x++) {
+                    const idx = Math.floor((rand() * 0.7 + ((x + y * 3) % 3) * 0.1) * stonePalette.length);
+                    stCtx.fillStyle = stonePalette[Math.min(idx, stonePalette.length - 1)];
+                    stCtx.fillRect(x, y, 1, 1);
+                }
+            }
+            TextureAtlas.stone = canvasToThreeTexture(stoneCanvas);
+            TextureAtlas.stoneDataURL = stoneCanvas.toDataURL();
+
+            // 5. Булыжник (Cobblestone)
+            const cobbleCanvas = createPixelCanvas(16, 16);
+            const cbCtx = cobbleCanvas.getContext('2d');
+            const cobblePalette = ['#6b6b6b', '#525252', '#828282', '#3f3f3f', '#949494'];
+            for (let y = 0; y < 16; y++) {
+                for (let x = 0; x < 16; x++) {
+                    const edge = ((x * 3 + y * 5) % 7 === 0) || ((x * 7 - y * 2) % 6 === 0);
+                    cbCtx.fillStyle = edge ? '#383838' : cobblePalette[Math.floor(rand() * cobblePalette.length)];
+                    cbCtx.fillRect(x, y, 1, 1);
+                }
+            }
+            TextureAtlas.cobble = canvasToThreeTexture(cobbleCanvas);
+            TextureAtlas.cobbleDataURL = cobbleCanvas.toDataURL();
+
+            // 6. Дубовые доски (Oak Planks)
+            const planksCanvas = createPixelCanvas(16, 16);
+            const plCtx = planksCanvas.getContext('2d');
+            const plankColors = ['#a2824e', '#967745', '#af8d56', '#896c3e'];
+            for (let y = 0; y < 16; y++) {
+                const isSeamH = (y % 4 === 3);
+                for (let x = 0; x < 16; x++) {
+                    const isSeamV = ((y < 4 && x === 7) || (y >= 4 && y < 8 && x === 13) || (y >= 8 && y < 12 && x === 4) || (y >= 12 && x === 11));
+                    plCtx.fillStyle = (isSeamH || isSeamV) ? '#6e552f' : plankColors[Math.floor(rand() * plankColors.length)];
+                    plCtx.fillRect(x, y, 1, 1);
+                }
+            }
+            TextureAtlas.planks = canvasToThreeTexture(planksCanvas);
+            TextureAtlas.planksDataURL = planksCanvas.toDataURL();
+
+            // 7. Дубовое бревно (Oak Log Side & Top)
+            const logSideCanvas = createPixelCanvas(16, 16);
+            const lsCtx = logSideCanvas.getContext('2d');
+            const barkColors = ['#584428', '#4b3920', '#665030', '#3f2f19'];
+            for (let x = 0; x < 16; x++) {
+                const stripeBase = barkColors[x % barkColors.length];
+                for (let y = 0; y < 16; y++) {
+                    lsCtx.fillStyle = rand() > 0.35 ? stripeBase : barkColors[Math.floor(rand() * barkColors.length)];
+                    lsCtx.fillRect(x, y, 1, 1);
+                }
+            }
+            TextureAtlas.logSide = canvasToThreeTexture(logSideCanvas);
+            TextureAtlas.logSideDataURL = logSideCanvas.toDataURL();
+
+            const logTopCanvas = createPixelCanvas(16, 16);
+            const ltCtx = logTopCanvas.getContext('2d');
+            for (let y = 0; y < 16; y++) {
+                for (let x = 0; x < 16; x++) {
+                    const dist = Math.max(Math.abs(x - 7.5), Math.abs(y - 7.5));
+                    if (dist > 6) ltCtx.fillStyle = '#584428';
+                    else if (Math.floor(dist) % 2 === 0) ltCtx.fillStyle = '#a88956';
+                    else ltCtx.fillStyle = '#937646';
+                    ltCtx.fillRect(x, y, 1, 1);
+                }
+            }
+            TextureAtlas.logTop = canvasToThreeTexture(logTopCanvas);
+
+            // 8. Листва (Leaves)
+            const leavesCanvas = createPixelCanvas(16, 16);
+            const lvCtx = leavesCanvas.getContext('2d');
+            const leafPalette = ['#387624', '#2c611b', '#44892d', '#234f14', '#4d9635'];
+            for (let y = 0; y < 16; y++) {
+                for (let x = 0; x < 16; x++) {
+                    lvCtx.fillStyle = leafPalette[Math.floor(rand() * leafPalette.length)];
+                    lvCtx.fillRect(x, y, 1, 1);
+                }
+            }
+            TextureAtlas.leaves = canvasToThreeTexture(leavesCanvas);
+            TextureAtlas.leavesDataURL = leavesCanvas.toDataURL();
+
+            // 9. Песок (Sand)
+            const sandCanvas = createPixelCanvas(16, 16);
+            const snCtx = sandCanvas.getContext('2d');
+            const sandPalette = ['#dbd3a0', '#d0c792', '#e4dcab', '#c4ba84'];
+            for (let y = 0; y < 16; y++) {
+                for (let x = 0; x < 16; x++) {
+                    snCtx.fillStyle = sandPalette[Math.floor(rand() * sandPalette.length)];
+                    snCtx.fillRect(x, y, 1, 1);
+                }
+            }
+            TextureAtlas.sand = canvasToThreeTexture(sandCanvas);
+            TextureAtlas.sandDataURL = sandCanvas.toDataURL();
+
+            // 10. Вода (Water) — однородная пиксельная текстура без диагональных полос
+            const waterCanvas = createPixelCanvas(16, 16);
+            const wtCtx = waterCanvas.getContext('2d');
+            const waterPalette = ['#285cc4', '#2353b5', '#2e64cf', '#2557bd'];
+            for (let y = 0; y < 16; y++) {
+                for (let x = 0; x < 16; x++) {
+                    const waveIdx = Math.floor(rand() * waterPalette.length);
+                    wtCtx.fillStyle = waterPalette[waveIdx];
+                    wtCtx.fillRect(x, y, 1, 1);
+                }
+                if (y % 4 === 1) {
+                    const glintX = Math.floor(rand() * 11);
+                    wtCtx.fillStyle = '#3b73e0';
+                    wtCtx.fillRect(glintX, y, 3, 1);
+                }
+            }
+            TextureAtlas.water = canvasToThreeTexture(waterCanvas);
+            TextureAtlas.waterDataURL = waterCanvas.toDataURL();
+
+            // 11. Лицо Стива (для 3D-игроков в мультиплеере)
+            const steveHeadCanvas = createPixelCanvas(16, 16);
+            const shCtx = steveHeadCanvas.getContext('2d');
+            shCtx.fillStyle = '#b9855c';
+            shCtx.fillRect(0, 0, 16, 16);
+            shCtx.fillStyle = '#3b2614';
+            shCtx.fillRect(0, 0, 16, 4);
+            shCtx.fillRect(0, 4, 2, 3);
+            shCtx.fillRect(14, 4, 2, 3);
+            shCtx.fillStyle = '#ffffff';
+            shCtx.fillRect(2, 7, 4, 2);
+            shCtx.fillRect(10, 7, 4, 2);
+            shCtx.fillStyle = '#42388c';
+            shCtx.fillRect(4, 7, 2, 2);
+            shCtx.fillRect(10, 7, 2, 2);
+            shCtx.fillStyle = '#9c6b46';
+            shCtx.fillRect(6, 9, 4, 2);
+            shCtx.fillStyle = '#5c3820';
+            shCtx.fillRect(4, 12, 8, 2);
+            shCtx.fillRect(6, 11, 4, 1);
+            TextureAtlas.steveFace = canvasToThreeTexture(steveHeadCanvas);
+
+            const styleTag = document.createElement('style');
+            styleTag.innerHTML = `
+                .mc-btn { background-image: url(${TextureAtlas.stoneDataURL}); }
+                .mc-dirt-panel { background-image: url(${TextureAtlas.dirtDataURL}); }
+            `;
+            document.head.appendChild(styleTag);
+        }
+
+        generateAllBlockTextures();
+
+        /***********************************************************************
+         * 3. РЕЕСТР БЛОКОВ И МАТЕРИАЛОВ THREE.JS (9-Й СЛОТ — ВЕДРО ВОДЫ)
+         ***********************************************************************/
+        const WATER_BLOCK_ID = 9;
+
+        const WATER_BLOCK = {
+            id: WATER_BLOCK_ID,
+            name: 'Ведро воды (Вода)',
+            icon: TextureAtlas.waterDataURL,
+            isLiquid: true,
+            materials: new THREE.MeshLambertMaterial({
+                map: TextureAtlas.water,
+                transparent: true,
+                opacity: 0.78,
+                depthWrite: false,
+                side: THREE.DoubleSide
+            })
+        };
+
+        const BLOCK_TYPES = [
+            {
+                id: 1,
+                name: 'Блок дёрна',
+                icon: TextureAtlas.grassSideDataURL,
+                materials: [
+                    new THREE.MeshLambertMaterial({ map: TextureAtlas.grassSide }),
+                    new THREE.MeshLambertMaterial({ map: TextureAtlas.grassSide }),
+                    new THREE.MeshLambertMaterial({ map: TextureAtlas.grassTop }),
+                    new THREE.MeshLambertMaterial({ map: TextureAtlas.dirt }),
+                    new THREE.MeshLambertMaterial({ map: TextureAtlas.grassSide }),
+                    new THREE.MeshLambertMaterial({ map: TextureAtlas.grassSide })
+                ]
+            },
+            {
+                id: 2,
+                name: 'Земля',
+                icon: TextureAtlas.dirtDataURL,
+                materials: new THREE.MeshLambertMaterial({ map: TextureAtlas.dirt })
+            },
+            {
+                id: 3,
+                name: 'Камень',
+                icon: TextureAtlas.stoneDataURL,
+                materials: new THREE.MeshLambertMaterial({ map: TextureAtlas.stone })
+            },
+            {
+                id: 4,
+                name: 'Булыжник',
+                icon: TextureAtlas.cobbleDataURL,
+                materials: new THREE.MeshLambertMaterial({ map: TextureAtlas.cobble })
+            },
+            {
+                id: 5,
+                name: 'Дубовые доски',
+                icon: TextureAtlas.planksDataURL,
+                materials: new THREE.MeshLambertMaterial({ map: TextureAtlas.planks })
+            },
+            {
+                id: 6,
+                name: 'Дубовое бревно',
+                icon: TextureAtlas.logSideDataURL,
+                materials: [
+                    new THREE.MeshLambertMaterial({ map: TextureAtlas.logSide }),
+                    new THREE.MeshLambertMaterial({ map: TextureAtlas.logSide }),
+                    new THREE.MeshLambertMaterial({ map: TextureAtlas.logTop }),
+                    new THREE.MeshLambertMaterial({ map: TextureAtlas.logTop }),
+                    new THREE.MeshLambertMaterial({ map: TextureAtlas.logSide }),
+                    new THREE.MeshLambertMaterial({ map: TextureAtlas.logSide })
+                ]
+            },
+            {
+                id: 7,
+                name: 'Дубовая листва',
+                icon: TextureAtlas.leavesDataURL,
+                materials: new THREE.MeshLambertMaterial({ map: TextureAtlas.leaves })
+            },
+            {
+                id: 8,
+                name: 'Песок',
+                icon: TextureAtlas.sandDataURL,
+                materials: new THREE.MeshLambertMaterial({ map: TextureAtlas.sand })
+            },
+            WATER_BLOCK
+        ];
+
+        const ALL_BLOCKS_MAP = new Map();
+        BLOCK_TYPES.forEach(b => ALL_BLOCKS_MAP.set(b.id, b));
+
+        /***********************************************************************
+         * 4. THREE.JS СЦЕНА, НЕБО, СОЛНЦЕ, ОБЛАКА И БЛОК В РУКЕ
+         ***********************************************************************/
+        const canvas = document.getElementById('game-canvas');
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(78, window.innerWidth / window.innerHeight, 0.1, 180);
+        camera.rotation.order = 'YXZ';
+        camera.up.set(0, 1, 0);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.68);
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.DirectionalLight(0xfff6e0, 0.65);
+        sunLight.position.set(45, 85, 35);
+        scene.add(sunLight);
+
+        const celestialGroup = new THREE.Group();
+        scene.add(celestialGroup);
+
+        const sunMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(14, 14, 14),
+            new THREE.MeshBasicMaterial({ color: 0xFFF380 })
+        );
+        sunMesh.position.set(60, 95, -50);
+        celestialGroup.add(sunMesh);
+
+        const cloudsGroup = new THREE.Group();
+        scene.add(cloudsGroup);
+
+        function createVoxelClouds() {
+            const cloudMat = new THREE.MeshLambertMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.86
+            });
+            const rand = mulberry32(9001);
+            for (let i = 0; i < 24; i++) {
+                const w = 6 + Math.floor(rand() * 10);
+                const d = 6 + Math.floor(rand() * 10);
+                const geo = new THREE.BoxGeometry(w, 1.5, d);
+                const mesh = new THREE.Mesh(geo, cloudMat);
+                mesh.position.set(
+                    (rand() - 0.5) * 140,
+                    36 + (i % 3) * 1.5,
+                    (rand() - 0.5) * 140
+                );
+                cloudsGroup.add(mesh);
+            }
+        }
+        createVoxelClouds();
+
+        const TIME_PRESETS = [
+            { name: 'Солнечный день', short: '☀ День', sky: 0x78A7FF, fog: 0x9ec2ff, amb: 0.72, dir: 0.65, sunColor: 0xFFF380 },
+            { name: 'Золотой закат', short: '🌅 Закат', sky: 0xd97543, fog: 0xe3925b, amb: 0.52, dir: 0.55, sunColor: 0xFF7B39 },
+            { name: 'Звёздная ночь', short: '🌙 Ночь', sky: 0x0b1026, fog: 0x121936, amb: 0.28, dir: 0.22, sunColor: 0xD8E4FF }
+        ];
+        let currentTimeIdx = 0;
+
+        function applyTimeOfDay(index) {
+            currentTimeIdx = index % TIME_PRESETS.length;
+            const preset = TIME_PRESETS[currentTimeIdx];
+            scene.background = new THREE.Color(preset.sky);
+            scene.fog = new THREE.Fog(preset.fog, 28, 82);
+            ambientLight.intensity = preset.amb;
+            sunLight.intensity = preset.dir;
+            sunMesh.material.color.setHex(preset.sunColor);
+
+            document.getElementById('btn-setting-time').textContent = `Время суток: ${preset.name}`;
+            document.getElementById('btn-hud-time').textContent = preset.short;
+        }
+        applyTimeOfDay(0);
+
+        const highlightGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.006, 1.006, 1.006));
+        const highlightMesh = new THREE.LineSegments(
+            highlightGeo,
+            new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 })
+        );
+        highlightMesh.visible = false;
+        scene.add(highlightMesh);
+
+        // 3D блок в руке игрока
+        const handGroup = new THREE.Group();
+        camera.add(handGroup);
+        scene.add(camera);
+
+        const handBlockGeo = new THREE.BoxGeometry(0.36, 0.36, 0.36);
+        const handBlockMesh = new THREE.Mesh(handBlockGeo, BLOCK_TYPES[0].materials);
+        handBlockMesh.position.set(0.52, -0.42, -0.68);
+        handBlockMesh.rotation.set(0.25, -0.65, 0.1);
+        handGroup.add(handBlockMesh);
+
+        let selectedHotbarIndex = 0;
+        let labelTimeout = null;
+
+        function updateHandBlockMaterial() {
+            const block = BLOCK_TYPES[selectedHotbarIndex];
+            if (block) {
+                handBlockMesh.material = block.materials;
+            }
+        }
+
+        /***********************************************************************
+         * 5. ИНИЦИАЛИЗАЦИЯ HUD (Хотбар, сердечки, сплэши)
+         ***********************************************************************/
+        const SPLASH_TEXTS = [
+            "100% без неона!",
+            "Настоящие кубы 16x16!",
+            "Физика воды и C418!",
+            "Никакого киберпанка!",
+            "Сделано на Three.js!",
+            "Осторожно, криперы спят!",
+            "Мультиплеер через PeerJS!",
+            "Прыгай через пробел!",
+            "Классика жанра!",
+            "Попробуй сид 777!"
+        ];
+
+        function buildHUD() {
+            const hotbarEl = document.getElementById('hotbar-container');
+            hotbarEl.innerHTML = '';
+            BLOCK_TYPES.forEach((block, index) => {
+                const slot = document.createElement('div');
+                slot.className = `mc-slot ${index === selectedHotbarIndex ? 'active' : ''}`;
+                slot.innerHTML = `
+                    <span class="mc-slot-key">${index + 1}</span>
+                    <img src="${block.icon}" alt="${block.name}" style="width: 32px; height: 32px; border: 1px solid rgba(0,0,0,0.4); pointer-events: none;">
+                `;
+                slot.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    selectHotbarSlot(index);
+                });
+                hotbarEl.appendChild(slot);
+            });
+
+            const heartsRow = document.getElementById('hearts-row');
+            heartsRow.innerHTML = '';
+            const heartSVG = `
+                <svg viewBox="0 0 9 9" class="mc-heart">
+                    <path d="M1 1h2v1h1v-1h2v1h1v3h-1v1h-1v1h-1v1h-1v-1h-1v-1h-1v-1h-1v-3h1z" fill="#000000"/>
+                    <path d="M2 2h1v1h1v1h1v-1h1v-1h1v2h-1v1h-1v1h-1v1h-1v-1h-1v-1h-1v-2z" fill="#e52520"/>
+                    <rect x="2" y="2" width="1" height="1" fill="#ff8f8f"/>
+                </svg>
+            `;
+            for (let i = 0; i < 10; i++) heartsRow.innerHTML += heartSVG;
+
+            const armorRow = document.getElementById('armor-row');
+            armorRow.innerHTML = '';
+            const armorSVG = `
+                <svg viewBox="0 0 9 9" class="mc-heart">
+                    <path d="M1 1h7v3h-1v2h-1v1h-3v-1h-1v-2h-1z" fill="#181818"/>
+                    <path d="M2 2h5v2h-1v2h-3v-2h-1z" fill="#b8b8b8"/>
+                    <rect x="2" y="2" width="2" height="1" fill="#ffffff"/>
+                </svg>
+            `;
+            for (let i = 0; i < 10; i++) armorRow.innerHTML += armorSVG;
+        }
+
+        let gameState = 'MENU'; // 'MENU' | 'PLAYING' | 'PAUSED'
+
+        function selectHotbarSlot(index) {
+            const newIndex = (index + BLOCK_TYPES.length) % BLOCK_TYPES.length;
+            if (newIndex !== selectedHotbarIndex && gameState === 'PLAYING') {
+                sound.playClick();
+            }
+            selectedHotbarIndex = newIndex;
+            const slots = document.querySelectorAll('#hotbar-container .mc-slot');
+            slots.forEach((s, i) => s.classList.toggle('active', i === selectedHotbarIndex));
+
+            const label = document.getElementById('hotbar-item-label');
+            const block = BLOCK_TYPES[selectedHotbarIndex];
+            label.textContent = block.name;
+            label.style.opacity = '1';
+
+            if (labelTimeout) clearTimeout(labelTimeout);
+            labelTimeout = setTimeout(() => {
+                label.style.opacity = '0.35';
+            }, 2200);
+
+            updateHandBlockMaterial();
+        }
+
+        buildHUD();
+
+        /***********************************************************************
+         * 6. ФУНКЦИИ ШУМА, ХРАНЕНИЯ БЛОКОВ, ВОДЫ И ГЕНЕРАЦИИ МИРА
+         ***********************************************************************/
+        const blockGeo = new THREE.BoxGeometry(1, 1, 1);
+
+        function stringToSeed(str) {
+            let h = 2166136261 >>> 0;
+            for (let i = 0; i < str.length; i++) {
+                h ^= str.charCodeAt(i);
+                h = Math.imul(h, 16777619);
+            }
+            return h >>> 0;
+        }
+
+        function hash2D(x, z, seed) {
+            let n = Math.imul(x, 374761393) + Math.imul(z, 668265263) + Math.imul(seed, 1442695041);
+            n = (n ^ (n >>> 13)) >>> 0;
+            n = Math.imul(n, 1274126177) >>> 0;
+            return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+        }
+
+        function smoothNoise2D(x, z, seed) {
+            const ix = Math.floor(x);
+            const iz = Math.floor(z);
+            const fx = x - ix;
+            const fz = z - iz;
+            const u = fx * fx * (3 - 2 * fx);
+            const v = fz * fz * (3 - 2 * fz);
+
+            const n00 = hash2D(ix, iz, seed);
+            const n10 = hash2D(ix + 1, iz, seed);
+            const n01 = hash2D(ix, iz + 1, seed);
+            const n11 = hash2D(ix + 1, iz + 1, seed);
+
+            const nx0 = n00 * (1 - u) + n10 * u;
+            const nx1 = n01 * (1 - u) + n11 * u;
+            return nx0 * (1 - v) + nx1 * v;
+        }
+
+        function fbmHeight(x, z, seed, terrainType = 0) {
+            const n1 = smoothNoise2D(x * 0.045, z * 0.045, seed);
+            const n2 = smoothNoise2D(x * 0.1, z * 0.1, seed + 101) * 0.5;
+            const n3 = smoothNoise2D(x * 0.22, z * 0.22, seed + 303) * 0.25;
+            const combined = (n1 + n2 + n3) / 1.75;
+
+            if (terrainType === 1) {
+                // Тропические острова
+                const distFromCenter = Math.sqrt(x * x + z * z) / (worldSettings.radius * 1.15);
+                return Math.floor(3 + combined * 11 - distFromCenter * 3.2);
+            } else if (terrainType === 2) {
+                // Высокогорье
+                return Math.floor(4 + Math.pow(combined, 1.35) * 21);
+            }
+            // Классика (Холмы, дубы и озёра)
+            return Math.floor(4 + combined * 11);
+        }
+
+        function coordKey(x, y, z) {
+            return `${x},${y},${z}`;
+        }
+
+        function getBlock(x, y, z) {
+            return worldData.get(coordKey(x, y, z)) || 0;
+        }
+
+        function setBlockData(x, y, z, id, recordChange = false) {
+            const key = coordKey(x, y, z);
+            if (id === 0) {
+                worldData.delete(key);
+            } else {
+                worldData.set(key, id);
+            }
+            if (recordChange) {
+                modifiedBlocksHistory.set(key, id);
+            }
+        }
+
+        // Проверка: скрыт ли твёрдый блок со всех 6 сторон непрозрачными блоками
+        function isBlockCompletelyHidden(x, y, z, id) {
+            if (id === WATER_BLOCK_ID) return true; // Вода рендерится отдельным объединённым мешем без швов
+            const neighbors = [
+                getBlock(x + 1, y, z),
+                getBlock(x - 1, y, z),
+                getBlock(x, y + 1, z),
+                getBlock(x, y - 1, z),
+                getBlock(x, y, z + 1),
+                getBlock(x, y, z - 1)
+            ];
+            for (let i = 0; i < 6; i++) {
+                const n = neighbors[i];
+                if (n === 0 || n === WATER_BLOCK_ID) return false;
+            }
+            return true;
+        }
+
+        // Построение единого меша воды с отсечением внутренних граней (без полос и Z-fighting)
+        function rebuildWaterMesh() {
+            if (waterSurfaceMesh) {
+                scene.remove(waterSurfaceMesh);
+                waterSurfaceMesh.geometry.dispose();
+                waterSurfaceMesh = null;
+            }
+
+            const positions = [];
+            const normals = [];
+            const uvs = [];
+            const indices = [];
+            let vertexCount = 0;
+
+            function pushQuad(v0, v1, v2, v3, nx, ny, nz) {
+                positions.push(
+                    v0[0], v0[1], v0[2],
+                    v1[0], v1[1], v1[2],
+                    v2[0], v2[1], v2[2],
+                    v3[0], v3[1], v3[2]
+                );
+                for (let i = 0; i < 4; i++) {
+                    normals.push(nx, ny, nz);
+                }
+                uvs.push(0, 0, 1, 0, 1, 1, 0, 1);
+                indices.push(
+                    vertexCount, vertexCount + 1, vertexCount + 2,
+                    vertexCount, vertexCount + 2, vertexCount + 3
+                );
+                vertexCount += 4;
+            }
+
+            worldData.forEach((id, key) => {
+                if (id !== WATER_BLOCK_ID) return;
+                const parts = key.split(',');
+                const x = parseInt(parts[0], 10);
+                const y = parseInt(parts[1], 10);
+                const z = parseInt(parts[2], 10);
+
+                const upBlock = getBlock(x, y + 1, z);
+                const downBlock = getBlock(x, y - 1, z);
+                const pxBlock = getBlock(x + 1, y, z);
+                const nxBlock = getBlock(x - 1, y, z);
+                const pzBlock = getBlock(x, y, z + 1);
+                const nzBlock = getBlock(x, y, z - 1);
+
+                // Высота верхнего края воды: 0.88 блока на поверхности (как в настоящем Minecraft), 1.0 если сверху ещё вода
+                const yTop = (upBlock === WATER_BLOCK_ID) ? (y + 1.0) : (y + 0.88);
+                const yBot = y;
+
+                // Верхняя грань (+Y): рендерим только если сверху нет другого блока воды
+                if (upBlock === 0) {
+                    pushQuad(
+                        [x, yTop, z + 1],
+                        [x + 1, yTop, z + 1],
+                        [x + 1, yTop, z],
+                        [x, yTop, z],
+                        0, 1, 0
+                    );
+                }
+
+                // Нижняя грань (-Y): рендерим только если снизу воздух
+                if (downBlock === 0) {
+                    pushQuad(
+                        [x, yBot, z],
+                        [x + 1, yBot, z],
+                        [x + 1, yBot, z + 1],
+                        [x, yBot, z + 1],
+                        0, -1, 0
+                    );
+                }
+
+                // Боковые грани: НИКОГДА не рендерим между соседними блоками воды и вплотную к берегам
+                if (pxBlock === 0) {
+                    pushQuad(
+                        [x + 1, yBot, z + 1],
+                        [x + 1, yBot, z],
+                        [x + 1, yTop, z],
+                        [x + 1, yTop, z + 1],
+                        1, 0, 0
+                    );
+                }
+                if (nxBlock === 0) {
+                    pushQuad(
+                        [x, yBot, z],
+                        [x, yBot, z + 1],
+                        [x, yTop, z + 1],
+                        [x, yTop, z],
+                        -1, 0, 0
+                    );
+                }
+                if (pzBlock === 0) {
+                    pushQuad(
+                        [x, yBot, z + 1],
+                        [x + 1, yBot, z + 1],
+                        [x + 1, yTop, z + 1],
+                        [x, yTop, z + 1],
+                        0, 0, 1
+                    );
+                }
+                if (nzBlock === 0) {
+                    pushQuad(
+                        [x + 1, yBot, z],
+                        [x, yBot, z],
+                        [x, yTop, z],
+                        [x + 1, yTop, z],
+                        0, 0, -1
+                    );
+                }
+            });
+
+            if (positions.length === 0) return;
+
+            const waterGeo = new THREE.BufferGeometry();
+            waterGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            waterGeo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+            waterGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+            waterGeo.setIndex(indices);
+
+            waterSurfaceMesh = new THREE.Mesh(waterGeo, WATER_BLOCK.materials);
+            waterSurfaceMesh.renderOrder = 1;
+            scene.add(waterSurfaceMesh);
+        }
+
+        // Перестроение InstancedMesh для мгновенного рендера в 60 FPS
+        const dummyMatrix = new THREE.Matrix4();
+
+        function rebuildInstancedMeshes() {
+            // Очищаем старые меши
+            instancedMeshes.forEach(mesh => {
+                scene.remove(mesh);
+                mesh.dispose();
+            });
+            instancedMeshes.clear();
+
+            // Группируем видимые твёрдые блоки по типу (кроме воды ID=9)
+            const buckets = new Map();
+            BLOCK_TYPES.forEach(b => {
+                if (b.id !== WATER_BLOCK_ID) buckets.set(b.id, []);
+            });
+
+            worldData.forEach((id, key) => {
+                if (id === WATER_BLOCK_ID) return;
+                const parts = key.split(',');
+                const x = parseInt(parts[0], 10);
+                const y = parseInt(parts[1], 10);
+                const z = parseInt(parts[2], 10);
+
+                if (!isBlockCompletelyHidden(x, y, z, id)) {
+                    const arr = buckets.get(id);
+                    if (arr) arr.push({ x, y, z });
+                }
+            });
+
+            buckets.forEach((positions, id) => {
+                if (positions.length === 0) return;
+                const blockDef = ALL_BLOCKS_MAP.get(id);
+                const mesh = new THREE.InstancedMesh(blockGeo, blockDef.materials, positions.length);
+                mesh.userData.blockId = id;
+
+                for (let i = 0; i < positions.length; i++) {
+                    const p = positions[i];
+                    dummyMatrix.makeTranslation(p.x + 0.5, p.y + 0.5, p.z + 0.5);
+                    mesh.setMatrixAt(i, dummyMatrix);
+                }
+                mesh.instanceMatrix.needsUpdate = true;
+                scene.add(mesh);
+                instancedMeshes.set(id, mesh);
+            });
+
+            // Строим гладкую водную поверхность без внутренних граней
+            rebuildWaterMesh();
+        }
+
+        /***********************************************************************
+         * 6.1. КЛЕТОЧНАЯ ФИЗИКА ВОДЫ (РАСТЕКАНИЕ И ВОДОПАДЫ)
+         ***********************************************************************/
+        let waterTickAccumulator = 0;
+        const WATER_TICK_INTERVAL = 0.22; // 220 мс между шагами течения воды
+
+        // Активация соседних клеток воды вокруг изменённой координаты (x, y, z)
+        function wakeWaterAround(x, y, z, spreadPower = 5) {
+            const dirs = [
+                [0, 0, 0],
+                [1, 0, 0], [-1, 0, 0],
+                [0, 1, 0], [0, -1, 0],
+                [0, 0, 1], [0, 0, -1]
+            ];
+            for (let i = 0; i < dirs.length; i++) {
+                const nx = x + dirs[i][0];
+                const ny = y + dirs[i][1];
+                const nz = z + dirs[i][2];
+                if (getBlock(nx, ny, nz) === WATER_BLOCK_ID) {
+                    const key = coordKey(nx, ny, nz);
+                    const prev = activeWaterFrontier.get(key) || 0;
+                    activeWaterFrontier.set(key, Math.max(prev, spreadPower));
+                }
+            }
+        }
+
+        // Один шаг клеточного автомата физики воды
+        function stepWaterPhysics() {
+            if (activeWaterFrontier.size === 0) return;
+
+            const currentWave = Array.from(activeWaterFrontier.entries());
+            activeWaterFrontier.clear();
+
+            let changed = false;
+            const R = worldSettings.radius;
+
+            for (let i = 0; i < currentWave.length; i++) {
+                const [key, spreadLeft] = currentWave[i];
+                const parts = key.split(',');
+                const x = parseInt(parts[0], 10);
+                const y = parseInt(parts[1], 10);
+                const z = parseInt(parts[2], 10);
+
+                if (getBlock(x, y, z) !== WATER_BLOCK_ID) continue;
+
+                // 1. Приоритет: падение воды вертикально вниз (водопад)
+                if (y > 1) {
+                    const below = getBlock(x, y - 1, z);
+                    if (below === 0) {
+                        setBlockData(x, y - 1, z, WATER_BLOCK_ID, true);
+                        // При падении вниз вода получает потенциал растечься у подножия водопада
+                        activeWaterFrontier.set(coordKey(x, y - 1, z), 4);
+                        changed = true;
+                        continue; // Пока вода падает отвесно вниз, она не разливается вширь в воздухе
+                    }
+                }
+
+                // 2. Горизонтальное растекание по каналам, берегам и поверхности
+                if (spreadLeft > 0 && y >= 1) {
+                    const belowCurrent = getBlock(x, y - 1, z);
+                    // Вода растекается вбок, если под ней есть опора (твёрдый блок или другая вода)
+                    if (belowCurrent !== 0) {
+                        const horizDirs = [
+                            [1, 0], [-1, 0],
+                            [0, 1], [0, -1]
+                        ];
+                        for (let d = 0; d < 4; d++) {
+                            const nx = x + horizDirs[d][0];
+                            const nz = z + horizDirs[d][1];
+                            if (Math.abs(nx) > R || Math.abs(nz) > R) continue;
+
+                            if (getBlock(nx, y, nz) === 0) {
+                                setBlockData(nx, y, nz, WATER_BLOCK_ID, true);
+                                activeWaterFrontier.set(coordKey(nx, y, nz), spreadLeft - 1);
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (changed) {
+                rebuildWaterMesh();
+            }
+        }
+
+        // Генерация классического дуба Minecraft (ствол 4-6 блоков, нижняя крона 5x5x2 и верхушка 3x3x2)
+        function placeOakTree(tx, ty, tz, seedVal = 0) {
+            const trunkHeight = 4 + (Math.abs(tx * 11 + tz * 19 + seedVal) % 3); // 4..6 блоков
+
+            // 1. Нижняя широкая крона листвы 5x5x2 со скруглёнными углами
+            for (let ly = ty + trunkHeight - 2; ly <= ty + trunkHeight - 1; ly++) {
+                for (let dx = -2; dx <= 2; dx++) {
+                    for (let dz = -2; dz <= 2; dz++) {
+                        // Срезаем острые углы 5x5 как в оригинальном Minecraft
+                        if (Math.abs(dx) === 2 && Math.abs(dz) === 2) {
+                            if (ly === ty + trunkHeight - 1 || ((Math.abs(tx + dx + tz + dz) % 2) === 0)) {
+                                continue;
+                            }
+                        }
+                        if (dx === 0 && dz === 0) continue; // Место под ствол
+                        const lx = tx + dx;
+                        const lz = tz + dz;
+                        if (getBlock(lx, ly, lz) === 0) {
+                            setBlockData(lx, ly, lz, 7);
+                        }
+                    }
+                }
+            }
+
+            // 2. Верхняя шапка листвы 3x3x2 над стволом
+            for (let ly = ty + trunkHeight; ly <= ty + trunkHeight + 1; ly++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dz = -1; dz <= 1; dz++) {
+                        // На самом верхнем ярусе делаем крестообразную шапку без углов
+                        if (ly === ty + trunkHeight + 1 && Math.abs(dx) === 1 && Math.abs(dz) === 1) {
+                            continue;
+                        }
+                        const lx = tx + dx;
+                        const lz = tz + dz;
+                        if (getBlock(lx, ly, lz) === 0) {
+                            setBlockData(lx, ly, lz, 7);
+                        }
+                    }
+                }
+            }
+
+            // 3. Дубовый ствол (устанавливаем последним, чтобы листва никогда не перезаписала его)
+            for (let y = 0; y < trunkHeight; y++) {
+                setBlockData(tx, ty + y, tz, 6);
+            }
+        }
+
+        // Двухэтапная генерация мира: Этап 1 — рельеф и вода, Этап 2 — деревья
+        function generateWorld() {
+            worldData.clear();
+            activeWaterFrontier.clear();
+            modifiedBlocksHistory.clear();
+            const R = worldSettings.radius;
+            const seed = stringToSeed(worldSettings.seedString);
+            worldSettings.numericSeed = seed;
+            const seaLevel = 6;
+
+            // Сохраняем высоты поверхности для второго этапа
+            const surfaceHeights = new Map();
+
+            // ЭТАП 1: Генерация всех колонок рельефа и водных бассейнов
+            for (let x = -R; x <= R; x++) {
+                for (let z = -R; z <= R; z++) {
+                    const h = Math.max(1, fbmHeight(x, z, seed, worldSettings.terrainType));
+                    surfaceHeights.set(`${x},${z}`, h);
+
+                    for (let y = 0; y <= h; y++) {
+                        if (y === 0) {
+                            setBlockData(x, y, z, 4); // Основание из булыжника
+                        } else if (y < h - 2) {
+                            setBlockData(x, y, z, 3); // Камень
+                        } else if (y < h) {
+                            setBlockData(x, y, z, h <= seaLevel ? 8 : 2); // Песок у воды или Земля
+                        } else {
+                            // Верхний блок поверхности
+                            if (h <= seaLevel) {
+                                setBlockData(x, y, z, 8); // Песчаный пляж или дно
+                            } else if (h >= 20) {
+                                setBlockData(x, y, z, 3); // Скалистые вершины
+                            } else {
+                                setBlockData(x, y, z, 1); // Блок дёрна (Трава)
+                            }
+                        }
+                    }
+
+                    // Заполнение озёр и морей водой до уровня моря
+                    if (h < seaLevel) {
+                        for (let wy = h + 1; wy <= seaLevel; wy++) {
+                            setBlockData(x, wy, z, WATER_BLOCK_ID);
+                        }
+                    }
+                }
+            }
+
+            // ЭТАП 2: Генерация дубовых деревьев поверх полностью готового рельефа
+            const treeLocations = [];
+            const margin = 3;
+
+            function canPlaceTreeAt(tx, tz) {
+                // Оставляем свободную стартовую площадку 3x3 в самом центре для спавна игрока
+                if (Math.abs(tx) <= 2 && Math.abs(tz) <= 2) return false;
+                if (Math.abs(tx) > R - margin || Math.abs(tz) > R - margin) return false;
+
+                const h = surfaceHeights.get(`${tx},${tz}`);
+                if (h === undefined || h <= seaLevel || h >= 19) return false;
+                if (getBlock(tx, h, tz) !== 1) return false; // Только на блоке дёрна (травы)
+
+                // Проверяем расстояние до других деревьев, чтобы кроны красиво распределялись
+                for (let i = 0; i < treeLocations.length; i++) {
+                    const t = treeLocations[i];
+                    if (Math.abs(t.x - tx) < 4 && Math.abs(t.z - tz) < 4) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            // Сначала размещаем несколько гарантированных деревьев вокруг спавна, чтобы лес был виден сразу
+            const nearSpawnAngles = [0.4, 1.5, 2.6, 3.8, 4.9, 5.8];
+            nearSpawnAngles.forEach((angle, idx) => {
+                for (let dist = 5; dist <= 13; dist += 2) {
+                    const cx = Math.round(Math.cos(angle + idx * 0.2) * dist);
+                    const cz = Math.round(Math.sin(angle + idx * 0.2) * dist);
+                    if (canPlaceTreeAt(cx, cz)) {
+                        const ch = surfaceHeights.get(`${cx},${cz}`);
+                        treeLocations.push({ x: cx, y: ch + 1, z: cz });
+                        break;
+                    }
+                }
+            });
+
+            // Затем проходим по всему миру и засеваем дубовую рощу по сиду
+            for (let x = -R + margin; x <= R - margin; x++) {
+                for (let z = -R + margin; z <= R - margin; z++) {
+                    if (!canPlaceTreeAt(x, z)) continue;
+                    const treeRoll = hash2D(x * 17 + 13, z * 31 + 7, seed + 777);
+                    if (treeRoll > 0.84) {
+                        const h = surfaceHeights.get(`${x},${z}`);
+                        treeLocations.push({ x, y: h + 1, z });
+                    }
+                }
+            }
+
+            // Строим все деревья во втором проходе
+            treeLocations.forEach(t => placeOakTree(t.x, t.y, t.z, seed));
+
+            rebuildInstancedMeshes();
+
+            document.getElementById('hud-world-name').textContent = worldSettings.name;
+            document.getElementById('hud-seed').textContent = worldSettings.seedString;
+        }
+
+        /***********************************************************************
+         * 7. ЧАСТИЦЫ РАЗРУШЕНИЯ БЛОКА (ВОКСЕЛЬНЫЕ ОСКОЛКИ)
+         ***********************************************************************/
+        const activeParticles = [];
+        const particleGeo = new THREE.BoxGeometry(0.18, 0.18, 0.18);
+
+        function spawnBlockParticles(bx, by, bz, blockId) {
+            const blockDef = ALL_BLOCKS_MAP.get(blockId) || BLOCK_TYPES[0];
+            const mat = Array.isArray(blockDef.materials) ? blockDef.materials[0] : blockDef.materials;
+
+            for (let i = 0; i < 14; i++) {
+                const pMesh = new THREE.Mesh(particleGeo, mat);
+                pMesh.position.set(
+                    bx + 0.2 + Math.random() * 0.6,
+                    by + 0.2 + Math.random() * 0.6,
+                    bz + 0.2 + Math.random() * 0.6
+                );
+                const vel = new THREE.Vector3(
+                    (Math.random() - 0.5) * 4.2,
+                    Math.random() * 3.8 + 1.0,
+                    (Math.random() - 0.5) * 4.2
+                );
+                scene.add(pMesh);
+                activeParticles.push({ mesh: pMesh, vel, life: 0.55 });
+            }
+        }
+
+        function updateParticles(dt) {
+            for (let i = activeParticles.length - 1; i >= 0; i--) {
+                const p = activeParticles[i];
+                p.life -= dt;
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    activeParticles.splice(i, 1);
+                    continue;
+                }
+                p.vel.y -= 14.0 * dt;
+                p.mesh.position.addScaledVector(p.vel, dt);
+                p.mesh.rotation.x += 4 * dt;
+                p.mesh.rotation.y += 4 * dt;
+            }
+        }
+
+        /***********************************************************************
+         * 8. ИГРОК, ФИЗИКА, КОЛЛИЗИИ И УПРАВЛЕНИЕ ОТ ПЕРВОГО ЛИЦА
+         ***********************************************************************/
+        const player = {
+            pos: new THREE.Vector3(0.5, 22, 0.5),
+            vel: new THREE.Vector3(0, 0, 0),
+            yaw: 0,
+            pitch: 0,
+            height: 1.72,
+            eyeHeight: 1.54,
+            radius: 0.32,
+            onGround: false,
+            inWater: false,
+            headUnderwater: false,
+            flying: false,
+            mouseSensitivity: 0.0022,
+            walkBobTimer: 0,
+            stepSoundTimer: 0,
+            swingTimer: 0
+        };
+
+        const keysPressed = {};
+        let isChatOpen = false;
+        let panoramaAngle = 0;
+
+        function respawnPlayer() {
+            // Ищем самую высокую точку в центре мира
+            let spawnY = 25;
+            for (let y = 35; y >= 1; y--) {
+                const b = getBlock(0, y, 0);
+                if (b !== 0 && b !== WATER_BLOCK_ID) {
+                    spawnY = y + 1.05;
+                    break;
+                }
+            }
+            player.pos.set(0.5, spawnY, 0.5);
+            player.vel.set(0, 0, 0);
+            // Строго обнуляем углы обзора, чтобы камера смотрела ровно вперёд по горизонту без крена
+            player.yaw = 0;
+            player.pitch = 0;
+
+            camera.up.set(0, 1, 0);
+            camera.rotation.order = 'YXZ';
+            camera.rotation.set(0, 0, 0);
+            camera.position.set(player.pos.x, player.pos.y + player.eyeHeight, player.pos.z);
+        }
+
+        // Проверка пересечения хитбокса игрока с твёрдыми блоками мира
+        function checkBoxCollision(px, py, pz) {
+            const minX = Math.floor(px - player.radius);
+            const maxX = Math.floor(px + player.radius);
+            const minY = Math.floor(py);
+            const maxY = Math.floor(py + player.height - 0.02);
+            const minZ = Math.floor(pz - player.radius);
+            const maxZ = Math.floor(pz + player.radius);
+
+            for (let x = minX; x <= maxX; x++) {
+                for (let y = minY; y <= maxY; y++) {
+                    for (let z = minZ; z <= maxZ; z++) {
+                        const b = getBlock(x, y, z);
+                        if (b !== 0 && b !== WATER_BLOCK_ID) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        function updatePlayerPhysics(dt) {
+            const forward = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
+            const right = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+
+            const moveDir = new THREE.Vector3();
+            if (!isChatOpen) {
+                if (keysPressed['KeyW'] || keysPressed['ArrowUp']) moveDir.add(forward);
+                if (keysPressed['KeyS'] || keysPressed['ArrowDown']) moveDir.sub(forward);
+                if (keysPressed['KeyD'] || keysPressed['ArrowRight']) moveDir.add(right);
+                if (keysPressed['KeyA'] || keysPressed['ArrowLeft']) moveDir.sub(right);
+            }
+            if (moveDir.lengthSq() > 0) moveDir.normalize();
+
+            // Проверяем погружение тела и глаз в воду (ID = 9)
+            const footBlock = getBlock(Math.floor(player.pos.x), Math.floor(player.pos.y + 0.15), Math.floor(player.pos.z));
+            const waistBlock = getBlock(Math.floor(player.pos.x), Math.floor(player.pos.y + 0.85), Math.floor(player.pos.z));
+            const nowInWater = (footBlock === WATER_BLOCK_ID || waistBlock === WATER_BLOCK_ID);
+
+            // Звук всплеска при прыжке в воду
+            if (nowInWater && !player.inWater && player.vel.y < -2.5) {
+                sound.playSplash();
+            }
+            player.inWater = nowInWater;
+
+            const speed = player.flying ? 11.5 : (nowInWater ? 3.5 : 5.4);
+            player.vel.x = moveDir.x * speed;
+            player.vel.z = moveDir.z * speed;
+
+            if (player.flying) {
+                player.vel.y = 0;
+                if (!isChatOpen && keysPressed['Space']) player.vel.y = 7.5;
+                if (!isChatOpen && (keysPressed['ShiftLeft'] || keysPressed['ShiftRight'])) player.vel.y = -7.5;
+            } else if (nowInWater) {
+                // Вязкая гидродинамика и плавучесть в воде
+                player.vel.y -= 5.8 * dt;
+                player.vel.y *= Math.pow(0.25, dt); // Сопротивление воды
+                player.vel.y = Math.max(player.vel.y, -2.6);
+                if (!isChatOpen && keysPressed['Space']) {
+                    player.vel.y = 4.1; // Плавное всплытие вверх
+                }
+            } else {
+                player.vel.y -= 23.5 * dt;
+                player.vel.y = Math.max(player.vel.y, -34.0);
+                if (!isChatOpen && keysPressed['Space'] && player.onGround) {
+                    player.vel.y = 8.35;
+                    player.onGround = false;
+                }
+            }
+
+            // Пошаговое перемещение по осям X, Z, Y
+            const nextX = player.pos.x + player.vel.x * dt;
+            if (!checkBoxCollision(nextX, player.pos.y, player.pos.z)) {
+                player.pos.x = nextX;
+            }
+
+            const nextZ = player.pos.z + player.vel.z * dt;
+            if (!checkBoxCollision(player.pos.x, player.pos.y, nextZ)) {
+                player.pos.z = nextZ;
+            }
+
+            const nextY = player.pos.y + player.vel.y * dt;
+            if (!checkBoxCollision(player.pos.x, nextY, player.pos.z)) {
+                player.pos.y = nextY;
+                player.onGround = false;
+            } else {
+                // Если выплываем из воды к берегу и зажат пробел — помогаем выпрыгнуть на берег
+                if (nowInWater && !isChatOpen && keysPressed['Space'] && player.vel.y >= 0) {
+                    player.vel.y = 6.2;
+                } else {
+                    if (player.vel.y < 0) player.onGround = true;
+                    player.vel.y = 0;
+                }
+            }
+
+            // Защита от падения в пустоту
+            if (player.pos.y < -25) {
+                respawnPlayer();
+            }
+
+            // Покачивание камеры и звуки шагов / гребков в воде
+            const isMoving = moveDir.lengthSq() > 0.01 && (player.onGround || player.flying || nowInWater);
+            if (isMoving) {
+                player.walkBobTimer += dt * (nowInWater ? 6.5 : 10);
+                player.stepSoundTimer += dt;
+                if (nowInWater && player.stepSoundTimer > 0.52) {
+                    sound.playSwim();
+                    player.stepSoundTimer = 0;
+                } else if (!nowInWater && player.stepSoundTimer > 0.38 && player.onGround) {
+                    const blockUnderFeet = getBlock(
+                        Math.floor(player.pos.x),
+                        Math.floor(player.pos.y - 0.2),
+                        Math.floor(player.pos.z)
+                    ) || 1;
+                    sound.playStep(blockUnderFeet);
+                    player.stepSoundTimer = 0;
+                }
+            } else {
+                player.walkBobTimer = 0;
+            }
+
+            const bobOffsetY = Math.sin(player.walkBobTimer) * 0.045;
+            const eyeY = player.pos.y + player.eyeHeight + bobOffsetY;
+            camera.position.set(player.pos.x, eyeY, player.pos.z);
+
+            // Проверка погружения самой камеры под уровень воды (y + 0.88)
+            const camBlockX = Math.floor(camera.position.x);
+            const camBlockY = Math.floor(camera.position.y);
+            const camBlockZ = Math.floor(camera.position.z);
+            const blockAtEye = getBlock(camBlockX, camBlockY, camBlockZ);
+            const blockAboveEye = getBlock(camBlockX, camBlockY + 1, camBlockZ);
+            const waterSurfaceLimit = (blockAboveEye === WATER_BLOCK_ID) ? (camBlockY + 1.0) : (camBlockY + 0.88);
+            const isSubmerged = (blockAtEye === WATER_BLOCK_ID && camera.position.y <= waterSurfaceLimit);
+
+            if (isSubmerged !== player.headUnderwater) {
+                player.headUnderwater = isSubmerged;
+                const uwOverlay = document.getElementById('underwater-overlay');
+                if (isSubmerged) {
+                    uwOverlay.classList.remove('hidden');
+                    scene.fog.color.setHex(0x0d3166);
+                    scene.fog.near = 2;
+                    scene.fog.far = 26;
+                } else {
+                    uwOverlay.classList.add('hidden');
+                    const preset = TIME_PRESETS[currentTimeIdx];
+                    scene.fog.color.setHex(preset.fog);
+                    scene.fog.near = 28;
+                    scene.fog.far = 82;
+                }
+            }
+
+            // Строго выравниваем камеру в порядке YXZ без какого-либо наклона по оси Z (roll = 0)
+            camera.up.set(0, 1, 0);
+            camera.rotation.order = 'YXZ';
+            camera.rotation.set(player.pitch, player.yaw, 0);
+
+            // Анимация взмаха рукой при ломании/установке блока
+            if (player.swingTimer > 0) {
+                player.swingTimer = Math.max(0, player.swingTimer - dt * 5.5);
+                const s = Math.sin(player.swingTimer * Math.PI);
+                handBlockMesh.position.set(0.52 - s * 0.16, -0.42 + s * 0.12, -0.68 - s * 0.15);
+                handBlockMesh.rotation.set(0.25 - s * 0.8, -0.65 + s * 0.4, 0.1);
+            } else {
+                handBlockMesh.position.set(
+                    0.52 + Math.cos(player.walkBobTimer * 0.5) * 0.02,
+                    -0.42 + Math.abs(Math.sin(player.walkBobTimer)) * 0.025,
+                    -0.68
+                );
+                handBlockMesh.rotation.set(0.25, -0.65, 0.1);
+            }
+
+            // Обновление координат в HUD
+            document.getElementById('hud-coords').textContent =
+                `${player.pos.x.toFixed(1)} / ${player.pos.y.toFixed(1)} / ${player.pos.z.toFixed(1)}`;
+        }
+
+        /***********************************************************************
+         * 9. ВОКСЕЛЬНЫЙ РЕЙКАСТИНГ (ЛОМАНИЕ, УСТАНОВКА БЛОКОВ И РАЗЛИВ ВОДЫ)
+         ***********************************************************************/
+        function raycastVoxel(maxDist = 6.0) {
+            const origin = camera.position.clone();
+            const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+
+            const step = 0.05;
+            let prevX = Math.floor(origin.x);
+            let prevY = Math.floor(origin.y);
+            let prevZ = Math.floor(origin.z);
+
+            for (let d = 0.1; d <= maxDist; d += step) {
+                const px = origin.x + dir.x * d;
+                const py = origin.y + dir.y * d;
+                const pz = origin.z + dir.z * d;
+
+                const bx = Math.floor(px);
+                const by = Math.floor(py);
+                const bz = Math.floor(pz);
+
+                const id = getBlock(bx, by, bz);
+                if (id !== 0 && id !== WATER_BLOCK_ID) {
+                    return {
+                        hit: true,
+                        x: bx, y: by, z: bz,
+                        prevX, prevY, prevZ,
+                        blockId: id
+                    };
+                }
+                prevX = bx;
+                prevY = by;
+                prevZ = bz;
+            }
+            return { hit: false };
+        }
+
+        function updateBlockHighlight() {
+            if (gameState !== 'PLAYING') {
+                highlightMesh.visible = false;
+                return;
+            }
+            const res = raycastVoxel(6.0);
+            if (res.hit) {
+                highlightMesh.visible = true;
+                highlightMesh.position.set(res.x + 0.5, res.y + 0.5, res.z + 0.5);
+            } else {
+                highlightMesh.visible = false;
+            }
+        }
+
+        // Применение изменения блока (локально или по сети от другого игрока)
+        function applyWorldBlockChange(x, y, z, newBlockId, isLocalAction = true) {
+            const oldId = getBlock(x, y, z);
+            setBlockData(x, y, z, newBlockId, true);
+
+            if (newBlockId === 0) {
+                // Если сломали блок рядом с водой — пробуждаем соседнюю воду, чтобы она хлынула в проём!
+                wakeWaterAround(x, y, z, 5);
+                if (oldId !== 0 && oldId !== WATER_BLOCK_ID) {
+                    spawnBlockParticles(x, y, z, oldId);
+                    sound.playBlockSound('break', oldId);
+                }
+            } else if (newBlockId === WATER_BLOCK_ID) {
+                // Поставили источник воды из ведра — запускаем растекание
+                wakeWaterAround(x, y, z, 5);
+                sound.playSplash();
+            } else {
+                sound.playBlockSound('place', newBlockId);
+            }
+
+            rebuildInstancedMeshes();
+
+            if (isLocalAction && mpManager) {
+                mpManager.broadcastBlockUpdate(x, y, z, newBlockId);
+            }
+        }
+
+        function handleBlockAction(button) {
+            if (gameState !== 'PLAYING' || isChatOpen) return;
+            const res = raycastVoxel(6.0);
+            if (!res.hit) {
+                player.swingTimer = 1.0;
+                return;
+            }
+
+            if (button === 0) {
+                // ЛКМ — сломать блок
+                applyWorldBlockChange(res.x, res.y, res.z, 0, true);
+                player.swingTimer = 1.0;
+            } else if (button === 2) {
+                // ПКМ — поставить выбранный блок (или вылить ведро воды!)
+                const tx = res.prevX;
+                const ty = res.prevY;
+                const tz = res.prevZ;
+                const placeId = BLOCK_TYPES[selectedHotbarIndex].id;
+
+                if (placeId !== WATER_BLOCK_ID) {
+                    // Проверяем, не ставим ли мы твёрдый блок прямо внутрь хитбокса игрока
+                    setBlockData(tx, ty, tz, placeId, false);
+                    if (checkBoxCollision(player.pos.x, player.pos.y, player.pos.z)) {
+                        setBlockData(tx, ty, tz, 0, false);
+                        return;
+                    }
+                }
+                applyWorldBlockChange(tx, ty, tz, placeId, true);
+                player.swingTimer = 1.0;
+            }
+        }
+
+        /***********************************************************************
+         * 9.5. ГИБРИДНЫЙ МУЛЬТИПЛЕЕР (WEBSOCKET MQTT WSS + PEERJS С ЯВНЫМ ID)
+         * Полностью совместим с GitHub Pages (без ошибок CORS и 403 Forbidden)
+         ***********************************************************************/
+        class MultiplayerManager {
+            constructor() {
+                this.peer = null;
+                this.mqttClient = null;
+                this.isHost = false;
+                this.roomCode = '';
+                this.myClientId = 'pizda-node-' + Math.random().toString(36).substring(2, 10);
+                this.nickname = 'Steve_' + Math.floor(100 + Math.random() * 899);
+                this.connections = new Map();
+                this.remotePlayers = new Map();
+                this.syncTimer = 0;
+                this.worldReceived = false;
+
+                // Публичные WebSocket-брокеры (работают через чистый WSS без HTTP CORS и 403 на GitHub Pages)
+                this.wssBrokers = [
+                    'wss://broker.emqx.io:8084/mqtt',
+                    'wss://broker.hivemq.com:8884/mqtt',
+                    'wss://test.mosquitto.org:8081/mqtt'
+                ];
+                this.currentBrokerIdx = 0;
+
+                const nickInput = document.getElementById('input-mp-nick');
+                if (nickInput) nickInput.value = this.nickname;
+            }
+
+            setStatus(msg, isError = false) {
+                const el = document.getElementById('mp-menu-status');
+                if (el) {
+                    el.textContent = msg;
+                    el.className = `mc-font-sm text-center ${isError ? 'txt-red' : 'txt-yellow'}`;
+                }
+            }
+
+            addChatMessage(sender, text, color = '#FFFFFF') {
+                const box = document.getElementById('chat-messages');
+                if (!box) return;
+                const line = document.createElement('div');
+                line.style.background = 'rgba(0,0,0,0.6)';
+                line.style.padding = '3px 6px';
+                line.style.borderLeft = '2px solid #FFFF55';
+                line.style.color = color;
+                line.textContent = sender ? `<${sender}> ${text}` : text;
+                box.appendChild(line);
+                while (box.children.length > 8) {
+                    box.removeChild(box.firstChild);
+                }
+            }
+
+            createPlayerAvatar(nick) {
+                const group = new THREE.Group();
+
+                const headMats = [
+                    new THREE.MeshLambertMaterial({ color: 0xb9855c }),
+                    new THREE.MeshLambertMaterial({ color: 0xb9855c }),
+                    new THREE.MeshLambertMaterial({ color: 0x3b2614 }),
+                    new THREE.MeshLambertMaterial({ color: 0xb9855c }),
+                    new THREE.MeshLambertMaterial({ color: 0x3b2614 }),
+                    new THREE.MeshLambertMaterial({ map: TextureAtlas.steveFace })
+                ];
+                const bodyMat = new THREE.MeshLambertMaterial({ color: 0x0099aa });
+                const limbMat = new THREE.MeshLambertMaterial({ color: 0x3b479c });
+                const armMat = new THREE.MeshLambertMaterial({ color: 0xb9855c });
+
+                const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMats);
+                head.position.set(0, 1.45, 0);
+                group.add(head);
+
+                const torso = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.65, 0.26), bodyMat);
+                torso.position.set(0, 0.88, 0);
+                group.add(torso);
+
+                const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.65, 0.22), armMat);
+                leftArm.position.set(-0.37, 0.88, 0);
+                group.add(leftArm);
+
+                const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.65, 0.22), armMat);
+                rightArm.position.set(0.37, 0.88, 0);
+                group.add(rightArm);
+
+                const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.58, 0.23), limbMat);
+                leftLeg.position.set(-0.13, 0.29, 0);
+                group.add(leftLeg);
+
+                const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.58, 0.23), limbMat);
+                rightLeg.position.set(0.13, 0.29, 0);
+                group.add(rightLeg);
+
+                const nameCanvas = document.createElement('canvas');
+                nameCanvas.width = 256;
+                nameCanvas.height = 64;
+                const nCtx = nameCanvas.getContext('2d');
+                nCtx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+                nCtx.fillRect(8, 12, 240, 40);
+                nCtx.font = 'bold 22px monospace';
+                nCtx.fillStyle = '#FFFF55';
+                nCtx.textAlign = 'center';
+                nCtx.fillText(nick.slice(0, 15), 128, 39);
+
+                const nameTex = new THREE.CanvasTexture(nameCanvas);
+                const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameTex, transparent: true }));
+                sprite.position.set(0, 2.02, 0);
+                sprite.scale.set(1.6, 0.4, 1);
+                group.add(sprite);
+
+                scene.add(group);
+                return { group, head, leftArm, rightArm, leftLeg, rightLeg };
+            }
+
+            ensureRemotePlayer(peerId, nick = 'Player') {
+                if (!peerId || peerId === this.myClientId) return null;
+                if (this.remotePlayers.has(peerId)) {
+                    return this.remotePlayers.get(peerId);
+                }
+                const avatar = this.createPlayerAvatar(nick);
+                const rp = {
+                    ...avatar,
+                    nick,
+                    targetPos: new THREE.Vector3(0.5, 18, 0.5),
+                    targetYaw: 0,
+                    targetPitch: 0,
+                    walkPhase: 0,
+                    lastSeen: performance.now()
+                };
+                this.remotePlayers.set(peerId, rp);
+                this.updateHudStatus();
+                return rp;
+            }
+
+            removeRemotePlayer(peerId) {
+                const rp = this.remotePlayers.get(peerId);
+                if (rp) {
+                    scene.remove(rp.group);
+                    this.remotePlayers.delete(peerId);
+                }
+                this.connections.delete(peerId);
+                this.updateHudStatus();
+            }
+
+            clearAllRemotePlayers() {
+                if (this.mqttClient && this.mqttClient.connected && this.roomCode) {
+                    this.publishMqtt({
+                        type: 'player_left',
+                        peerId: this.myClientId
+                    });
+                }
+                this.remotePlayers.forEach(rp => scene.remove(rp.group));
+                this.remotePlayers.clear();
+                this.connections.forEach(conn => conn.close());
+                this.connections.clear();
+                if (this.mqttClient) {
+                    try { this.mqttClient.end(true); } catch (e) {}
+                    this.mqttClient = null;
+                }
+                if (this.peer) {
+                    try { this.peer.destroy(); } catch (e) {}
+                    this.peer = null;
+                }
+                this.roomCode = '';
+                this.worldReceived = false;
+                document.getElementById('hud-room-box').classList.add('hidden');
+                this.updateHudStatus();
+            }
+
+            updateHudStatus() {
+                const bar = document.getElementById('hud-mp-bar');
+                if (!bar) return;
+                if (!this.roomCode) {
+                    bar.textContent = 'Сеть: Одиночная игра';
+                } else {
+                    const count = this.remotePlayers.size + 1;
+                    bar.textContent = `Сеть: ${this.isHost ? 'Хост' : 'Клиент'} [${this.roomCode}] (Игроков: ${count})`;
+                }
+            }
+
+            getRoomTopic() {
+                return `pizdacraft/v2/room/${this.roomCode}`;
+            }
+
+            publishMqtt(packet) {
+                if (!this.mqttClient || !this.mqttClient.connected || !this.roomCode) return;
+                try {
+                    const payload = JSON.stringify({
+                        ...packet,
+                        senderId: this.myClientId
+                    });
+                    this.mqttClient.publish(this.getRoomTopic(), payload, { qos: 0 });
+                } catch (e) {}
+            }
+
+            // Подключение к WebSocket-комнате (работает везде, включая GitHub Pages)
+            connectWssRoom(onConnectedCallback) {
+                if (typeof mqtt === 'undefined') {
+                    this.setStatus('WSS модуль недоступен, используем резервный P2P...', false);
+                    return;
+                }
+
+                const brokerUrl = this.wssBrokers[this.currentBrokerIdx % this.wssBrokers.length];
+                const client = mqtt.connect(brokerUrl, {
+                    clientId: this.myClientId + '-' + Math.floor(Math.random() * 9999),
+                    clean: true,
+                    connectTimeout: 6000,
+                    reconnectPeriod: 2000
+                });
+
+                this.mqttClient = client;
+
+                client.on('connect', () => {
+                    const topic = this.getRoomTopic();
+                    client.subscribe(topic, { qos: 0 }, (err) => {
+                        if (!err && onConnectedCallback) {
+                            onConnectedCallback();
+                        }
+                    });
+                });
+
+                client.on('message', (topic, messageBuffer) => {
+                    try {
+                        const data = JSON.parse(messageBuffer.toString());
+                        if (!data || data.senderId === this.myClientId) return;
+                        this.handlePacket(null, data);
+                    } catch (e) {}
+                });
+
+                client.on('error', () => {
+                    this.currentBrokerIdx++;
+                });
+            }
+
+            startHostServer() {
+                this.clearAllRemotePlayers();
+                this.nickname = document.getElementById('input-mp-nick').value.trim() || 'Host_Steve';
+                this.isHost = true;
+                const randomDigits = Math.floor(1000 + Math.random() * 9000);
+                this.roomCode = `PIZDA-${randomDigits}`;
+                this.myClientId = this.roomCode;
+
+                this.setStatus(`Запуск сервера ${this.roomCode}...`);
+
+                let roomStarted = false;
+                const finishHostLaunch = () => {
+                    if (roomStarted) return;
+                    roomStarted = true;
+                    this.setStatus(`Сервер создан! Код комнаты: ${this.roomCode}`);
+                    document.getElementById('hud-room-code').textContent = this.roomCode;
+                    document.getElementById('hud-room-box').classList.remove('hidden');
+                    this.updateHudStatus();
+                    startGameSession();
+                    this.addChatMessage('', `Сервер запущен! Отправьте другу код: ${this.roomCode}`, '#55FF55');
+                };
+
+                // 1. Основной транспорт: чистый WebSocket через MQTT-брокер (мгновенно и без CORS на GitHub Pages)
+                this.connectWssRoom(() => {
+                    finishHostLaunch();
+                });
+
+                // 2. Параллельный WebRTC-канал через PeerJS (передаём явный строковый ID this.roomCode, поэтому 0.peerjs.com/peerjs/id НЕ вызывается)
+                if (typeof Peer !== 'undefined') {
+                    try {
+                        this.peer = new Peer(this.roomCode, {
+                            config: {
+                                iceServers: [
+                                    { urls: 'stun:stun.l.google.com:19302' },
+                                    { urls: 'stun:stun1.l.google.com:19302' }
+                                ]
+                            }
+                        });
+                        this.peer.on('open', () => finishHostLaunch());
+                        this.peer.on('connection', (conn) => this.setupConnection(conn));
+                        this.peer.on('error', () => {
+                            // Если облако PeerJS недоступно, сервер продолжает работать через WSS
+                            finishHostLaunch();
+                        });
+                    } catch (e) {
+                        finishHostLaunch();
+                    }
+                }
+
+                // Гарантированный вход через 1.5 сек, даже если сеть долго отвечает
+                setTimeout(() => finishHostLaunch(), 1500);
+            }
+
+            joinServerByCode() {
+                let code = document.getElementById('input-mp-code').value.trim().toUpperCase();
+                if (!code) {
+                    this.setStatus('Введите код комнаты друга (например PIZDA-1234)', true);
+                    return;
+                }
+                if (/^\d{4}$/.test(code)) {
+                    code = `PIZDA-${code}`;
+                }
+
+                this.clearAllRemotePlayers();
+                this.nickname = document.getElementById('input-mp-nick').value.trim() || 'Player';
+                this.isHost = false;
+                this.roomCode = code;
+                this.worldReceived = false;
+
+                // ВАЖНО: Всегда генерируем непустой строковый ID клиента локально!
+                // Это полностью предотвращает вызов retrieveId() -> fetch('https://0.peerjs.com/peerjs/id') и ошибку 403 / CORS на GitHub Pages!
+                this.myClientId = 'pizda-client-' + Math.random().toString(36).substring(2, 10);
+
+                this.setStatus(`Подключение к комнате ${code}...`);
+
+                // 1. Подключаемся через WebSocket-комнату (без CORS и 403)
+                this.connectWssRoom(() => {
+                    this.publishMqtt({
+                        type: 'hello',
+                        nick: this.nickname,
+                        peerId: this.myClientId
+                    });
+
+                    // Повторный запрос инициализации мира, если Хост ещё прогружается
+                    setTimeout(() => {
+                        if (!this.worldReceived && this.roomCode) {
+                            this.publishMqtt({
+                                type: 'hello',
+                                nick: this.nickname,
+                                peerId: this.myClientId
+                            });
+                        }
+                    }, 1800);
+                });
+
+                // 2. Параллельно пробуем P2P соединение с явным строковым ID (без обращения к /peerjs/id)
+                if (typeof Peer !== 'undefined') {
+                    try {
+                        this.peer = new Peer(this.myClientId, {
+                            config: {
+                                iceServers: [
+                                    { urls: 'stun:stun.l.google.com:19302' },
+                                    { urls: 'stun:stun1.l.google.com:19302' }
+                                ]
+                            }
+                        });
+
+                        this.peer.on('open', () => {
+                            const conn = this.peer.connect(code, { reliable: true });
+                            this.setupConnection(conn);
+                        });
+
+                        this.peer.on('error', () => {
+                            // Игнорируем ошибку брокера PeerJS, так как работает основной WSS-канал
+                        });
+                    } catch (e) {}
+                }
+            }
+
+            setupConnection(conn) {
+                conn.on('open', () => {
+                    this.connections.set(conn.peer, conn);
+                    this.updateHudStatus();
+
+                    conn.send({
+                        type: 'hello',
+                        nick: this.nickname,
+                        peerId: this.myClientId
+                    });
+
+                    if (this.isHost) {
+                        const mods = Array.from(modifiedBlocksHistory.entries());
+                        conn.send({
+                            type: 'world_init',
+                            seedString: worldSettings.seedString,
+                            terrainType: worldSettings.terrainType,
+                            radius: worldSettings.radius,
+                            timeIdx: currentTimeIdx,
+                            hostNick: this.nickname,
+                            hostPeerId: this.myClientId,
+                            mods
+                        });
+                    }
+                });
+
+                conn.on('data', (data) => {
+                    this.handlePacket(conn, data);
+                });
+
+                conn.on('close', () => {
+                    const rp = this.remotePlayers.get(conn.peer);
+                    if (rp) {
+                        this.addChatMessage('', `${rp.nick} покинул игру`, '#FFAA00');
+                    }
+                    this.removeRemotePlayer(conn.peer);
+                });
+            }
+
+            handlePacket(conn, data) {
+                if (!data || !data.type) return;
+                const senderPeerId = data.peerId || data.senderId || (conn ? conn.peer : null);
+                if (senderPeerId === this.myClientId) return;
+
+                switch (data.type) {
+                    case 'hello': {
+                        const isNewPlayer = !this.remotePlayers.has(senderPeerId);
+                        const rp = this.ensureRemotePlayer(senderPeerId, data.nick);
+                        if (rp && isNewPlayer) {
+                            this.addChatMessage('', `${rp.nick} присоединился к миру!`, '#FFFF55');
+                        }
+
+                        if (this.isHost) {
+                            const mods = Array.from(modifiedBlocksHistory.entries());
+                            const initPacket = {
+                                type: 'world_init',
+                                targetPeerId: senderPeerId,
+                                seedString: worldSettings.seedString,
+                                terrainType: worldSettings.terrainType,
+                                radius: worldSettings.radius,
+                                timeIdx: currentTimeIdx,
+                                hostNick: this.nickname,
+                                hostPeerId: this.myClientId,
+                                mods
+                            };
+                            if (conn && conn.open) {
+                                conn.send(initPacket);
+                            }
+                            this.publishMqtt(initPacket);
+                        }
+                        break;
+                    }
+
+                    case 'world_init': {
+                        if (this.isHost || this.worldReceived) break;
+                        if (data.targetPeerId && data.targetPeerId !== this.myClientId) break;
+
+                        this.worldReceived = true;
+                        worldSettings.seedString = data.seedString;
+                        worldSettings.terrainType = data.terrainType || 0;
+                        worldSettings.radius = data.radius || 24;
+                        generateWorld();
+
+                        if (Array.isArray(data.mods)) {
+                            data.mods.forEach(([key, id]) => {
+                                const parts = key.split(',');
+                                setBlockData(
+                                    parseInt(parts[0], 10),
+                                    parseInt(parts[1], 10),
+                                    parseInt(parts[2], 10),
+                                    id,
+                                    true
+                                );
+                            });
+                            rebuildInstancedMeshes();
+                        }
+                        if (typeof data.timeIdx === 'number') {
+                            applyTimeOfDay(data.timeIdx);
+                        }
+                        if (data.hostPeerId && data.hostNick) {
+                            this.ensureRemotePlayer(data.hostPeerId, data.hostNick);
+                        }
+
+                        document.getElementById('hud-room-code').textContent = this.roomCode;
+                        document.getElementById('hud-room-box').classList.remove('hidden');
+                        this.updateHudStatus();
+                        startGameSession();
+                        this.addChatMessage('', `Подключено к комнате ${this.roomCode}!`, '#55FF55');
+                        break;
+                    }
+
+                    case 'move': {
+                        const rp = this.ensureRemotePlayer(senderPeerId, data.nick || 'Player');
+                        if (rp) {
+                            rp.targetPos.set(data.x, data.y, data.z);
+                            rp.targetYaw = data.yaw || 0;
+                            rp.targetPitch = data.pitch || 0;
+                            rp.lastSeen = performance.now();
+                        }
+
+                        if (this.isHost && conn) {
+                            this.connections.forEach((c, pid) => {
+                                if (pid !== conn.peer && c.open) c.send({ ...data, peerId: senderPeerId });
+                            });
+                        }
+                        break;
+                    }
+
+                    case 'block': {
+                        if (getBlock(data.x, data.y, data.z) !== data.id) {
+                            applyWorldBlockChange(data.x, data.y, data.z, data.id, false);
+                        }
+                        break;
+                    }
+
+                    case 'chat': {
+                        if (data.msgId && this.lastChatId === data.msgId) break;
+                        this.lastChatId = data.msgId;
+                        this.addChatMessage(data.sender, data.text, data.color || '#FFFFFF');
+                        break;
+                    }
+
+                    case 'player_left': {
+                        const rp = this.remotePlayers.get(senderPeerId);
+                        if (rp) {
+                            this.addChatMessage('', `${rp.nick} покинул игру`, '#FFAA00');
+                        }
+                        this.removeRemotePlayer(senderPeerId);
+                        break;
+                    }
+                }
+            }
+
+            broadcast(packet, excludePeerId = null) {
+                const enriched = { ...packet, peerId: this.myClientId };
+                this.publishMqtt(enriched);
+                this.connections.forEach((conn, pid) => {
+                    if (pid !== excludePeerId && conn.open) {
+                        conn.send(enriched);
+                    }
+                });
+            }
+
+            broadcastBlockUpdate(x, y, z, id) {
+                if (!this.roomCode) return;
+                this.broadcast({
+                    type: 'block',
+                    x, y, z, id
+                });
+            }
+
+            sendChat(text) {
+                const clean = text.trim();
+                if (!clean) return;
+                const msgId = Math.random().toString(36).substring(2, 9);
+                this.lastChatId = msgId;
+                this.addChatMessage(this.nickname, clean, '#FFFFFF');
+                if (this.roomCode) {
+                    this.broadcast({
+                        type: 'chat',
+                        msgId,
+                        sender: this.nickname,
+                        text: clean,
+                        color: '#FFFFFF'
+                    });
+                }
+            }
+
+            update(dt) {
+                if (this.roomCode && gameState === 'PLAYING') {
+                    this.syncTimer += dt;
+                    if (this.syncTimer >= 0.075) {
+                        this.syncTimer = 0;
+                        this.broadcast({
+                            type: 'move',
+                            peerId: this.myClientId,
+                            nick: this.nickname,
+                            x: Number(player.pos.x.toFixed(2)),
+                            y: Number(player.pos.y.toFixed(2)),
+                            z: Number(player.pos.z.toFixed(2)),
+                            yaw: Number(player.yaw.toFixed(3)),
+                            pitch: Number(player.pitch.toFixed(3))
+                        });
+                    }
+                }
+
+                this.remotePlayers.forEach((rp) => {
+                    const distSq = rp.group.position.distanceToSquared(rp.targetPos);
+                    rp.group.position.lerp(rp.targetPos, Math.min(1, dt * 12));
+                    rp.group.rotation.y = rp.targetYaw;
+                    rp.head.rotation.x = rp.targetPitch;
+
+                    if (distSq > 0.0015) {
+                        rp.walkPhase += dt * 10;
+                        const swing = Math.sin(rp.walkPhase) * 0.65;
+                        rp.leftLeg.rotation.x = swing;
+                        rp.rightLeg.rotation.x = -swing;
+                        rp.leftArm.rotation.x = -swing;
+                        rp.rightArm.rotation.x = swing;
+                    } else {
+                        rp.leftLeg.rotation.x *= 0.85;
+                        rp.rightLeg.rotation.x *= 0.85;
+                        rp.leftArm.rotation.x *= 0.85;
+                        rp.rightArm.rotation.x *= 0.85;
+                    }
+                });
+            }
+        }
+
+        const mpManager = new MultiplayerManager();
+
+        /***********************************************************************
+         * 10. СОБЫТИЯ МЫШИ, КЛАВИАТУРЫ, ЧАТА И ПЕРЕКЛЮЧЕНИЕ МЕНЮ
+         ***********************************************************************/
+        function toggleFlyMode() {
+            player.flying = !player.flying;
+            const hudState = document.getElementById('hud-fly-state');
+            const pauseBtn = document.getElementById('btn-pause-fly');
+            if (player.flying) {
+                hudState.textContent = 'Творческий (Полёт)';
+                hudState.className = 'txt-yellow';
+                pauseBtn.textContent = 'Полёт: ВКЛ';
+            } else {
+                hudState.textContent = 'Выживание (Ходьба)';
+                hudState.className = 'txt-green';
+                pauseBtn.textContent = 'Полёт: ВЫКЛ';
+            }
+        }
+
+        const chatInputRow = document.getElementById('chat-input-row');
+        const chatInput = document.getElementById('chat-input');
+
+        function openChatBox() {
+            if (gameState !== 'PLAYING') return;
+            isChatOpen = true;
+            chatInputRow.classList.remove('hidden');
+            if (document.pointerLockElement) {
+                document.exitPointerLock();
+            }
+            setTimeout(() => chatInput.focus(), 20);
+        }
+
+        function closeChatBox(send = false) {
+            if (!isChatOpen) return;
+            if (send && chatInput.value.trim()) {
+                mpManager.sendChat(chatInput.value);
+            }
+            chatInput.value = '';
+            isChatOpen = false;
+            chatInputRow.classList.add('hidden');
+            if (gameState === 'PLAYING' && canvas.requestPointerLock) {
+                canvas.requestPointerLock();
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (isChatOpen) {
+                if (e.code === 'Enter') {
+                    e.preventDefault();
+                    closeChatBox(true);
+                } else if (e.code === 'Escape') {
+                    e.preventDefault();
+                    closeChatBox(false);
+                }
+                return;
+            }
+
+            keysPressed[e.code] = true;
+
+            if (gameState === 'PLAYING') {
+                if (e.code.startsWith('Digit')) {
+                    const num = parseInt(e.code.replace('Digit', ''), 10);
+                    if (num >= 1 && num <= 9) {
+                        selectHotbarSlot(num - 1);
+                    }
+                } else if (e.code === 'KeyF') {
+                    toggleFlyMode();
+                } else if (e.code === 'KeyM') {
+                    sound.playClick();
+                    sound.nextMusicTrack();
+                } else if (e.code === 'KeyN') {
+                    applyTimeOfDay(currentTimeIdx + 1);
+                } else if (e.code === 'Enter' || e.code === 'KeyC') {
+                    e.preventDefault();
+                    openChatBox();
+                } else if (e.code === 'F3') {
+                    e.preventDefault();
+                    const dbg = document.getElementById('debug-panel');
+                    dbg.classList.toggle('hidden');
+                } else if (e.code === 'Escape') {
+                    pauseGame();
+                }
+            } else if (gameState === 'PAUSED' && e.code === 'Escape') {
+                resumeGame();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keysPressed[e.code] = false;
+        });
+
+        window.addEventListener('wheel', (e) => {
+            if (gameState !== 'PLAYING' || isChatOpen) return;
+            if (e.deltaY > 0) selectHotbarSlot(selectedHotbarIndex + 1);
+            else if (e.deltaY < 0) selectHotbarSlot(selectedHotbarIndex - 1);
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (gameState !== 'PLAYING' || isChatOpen) return;
+            if (document.pointerLockElement === canvas) {
+                if (Math.abs(e.movementX) > 250 || Math.abs(e.movementY) > 250) return;
+
+                player.yaw -= e.movementX * player.mouseSensitivity;
+                player.pitch -= e.movementY * player.mouseSensitivity;
+                const maxPitch = Math.PI / 2 - 0.01;
+                player.pitch = Math.max(-maxPitch, Math.min(maxPitch, player.pitch));
+            }
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (gameState === 'PLAYING') {
+                if (isChatOpen) {
+                    closeChatBox(false);
+                    return;
+                }
+                if (document.pointerLockElement !== canvas) {
+                    canvas.requestPointerLock();
+                } else {
+                    handleBlockAction(e.button);
+                }
+            }
+        });
+
+        window.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        document.addEventListener('pointerlockchange', () => {
+            if (document.pointerLockElement !== canvas && gameState === 'PLAYING' && !isChatOpen) {
+                pauseGame();
+            }
+        });
+
+        const mainMenuOverlay = document.getElementById('main-menu-overlay');
+        const gameHud = document.getElementById('game-hud');
+        const pauseOverlay = document.getElementById('pause-overlay');
+
+        const menuMainButtons = document.getElementById('menu-main-buttons');
+        const menuMultiplayer = document.getElementById('menu-multiplayer');
+        const menuWorldCreate = document.getElementById('menu-world-create');
+        const menuSettings = document.getElementById('menu-settings');
+        const menuControls = document.getElementById('menu-controls');
+
+        function showSubMenu(panel) {
+            sound.playClick();
+            menuMainButtons.classList.add('hidden');
+            [menuMultiplayer, menuWorldCreate, menuSettings, menuControls].forEach(el => {
+                el.classList.add('hidden');
+            });
+
+            if (panel === 'main') {
+                menuMainButtons.classList.remove('hidden');
+            } else {
+                panel.classList.remove('hidden');
+            }
+        }
+
+        function startGameSession() {
+            sound.playClick();
+            gameState = 'PLAYING';
+            isChatOpen = false;
+            mainMenuOverlay.classList.add('hidden');
+            pauseOverlay.classList.add('hidden');
+            gameHud.classList.remove('hidden');
+            handGroup.visible = true;
+            respawnPlayer();
+            if (canvas.requestPointerLock) {
+                canvas.requestPointerLock();
+            }
+        }
+
+        function pauseGame() {
+            gameState = 'PAUSED';
+            if (document.pointerLockElement) {
+                document.exitPointerLock();
+            }
+            pauseOverlay.classList.remove('hidden');
+        }
+
+        function resumeGame() {
+            sound.playClick();
+            gameState = 'PLAYING';
+            pauseOverlay.classList.add('hidden');
+            camera.up.set(0, 1, 0);
+            camera.rotation.order = 'YXZ';
+            camera.rotation.set(player.pitch, player.yaw, 0);
+            if (canvas.requestPointerLock) {
+                canvas.requestPointerLock();
+            }
+        }
+
+        function quitToMainMenu() {
+            sound.playClick();
+            gameState = 'MENU';
+            isChatOpen = false;
+            if (document.pointerLockElement) {
+                document.exitPointerLock();
+            }
+            document.getElementById('underwater-overlay').classList.add('hidden');
+            pauseOverlay.classList.add('hidden');
+            gameHud.classList.add('hidden');
+            mainMenuOverlay.classList.remove('hidden');
+            showSubMenu('main');
+            handGroup.visible = false;
+            highlightMesh.visible = false;
+        }
+
+        document.getElementById('splash-text').addEventListener('click', () => {
+            sound.playClick();
+            const splashEl = document.getElementById('splash-text');
+            splashEl.textContent = SPLASH_TEXTS[Math.floor(Math.random() * SPLASH_TEXTS.length)];
+        });
+
+        document.getElementById('menu-sound-toggle').addEventListener('click', (e) => {
+            sound.enabled = !sound.enabled;
+            if (sound.enabled) sound.playClick();
+            e.currentTarget.textContent = `Звук: ${sound.enabled ? 'ВКЛ' : 'ВЫКЛ'}`;
+        });
+
+        document.getElementById('menu-music-toggle').addEventListener('click', (e) => {
+            sound.playClick();
+            const isPlaying = sound.toggleMusic();
+            e.currentTarget.textContent = `Музыка: ${isPlaying ? 'ВКЛ' : 'ВЫКЛ'}`;
+        });
+
+        document.getElementById('menu-music-next').addEventListener('click', () => {
+            sound.playClick();
+            sound.nextMusicTrack();
+        });
+
+        document.getElementById('btn-hud-next-track').addEventListener('click', (e) => {
+            e.stopPropagation();
+            sound.playClick();
+            sound.nextMusicTrack();
+        });
+
+        document.getElementById('btn-quick-play').addEventListener('click', () => {
+            mpManager.clearAllRemotePlayers();
+            startGameSession();
+        });
+
+        document.getElementById('btn-open-multiplayer').addEventListener('click', () => {
+            showSubMenu(menuMultiplayer);
+        });
+
+        document.getElementById('btn-close-multiplayer').addEventListener('click', () => {
+            showSubMenu('main');
+        });
+
+        document.getElementById('btn-mp-host').addEventListener('click', () => {
+            sound.playClick();
+            mpManager.startHostServer();
+        });
+
+        document.getElementById('btn-mp-join').addEventListener('click', () => {
+            sound.playClick();
+            mpManager.joinServerByCode();
+        });
+
+        document.getElementById('btn-copy-room').addEventListener('click', (e) => {
+            e.stopPropagation();
+            sound.playClick();
+            const tempInput = document.createElement('input');
+            tempInput.value = mpManager.roomCode;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+            e.currentTarget.textContent = 'Скопировано!';
+            setTimeout(() => {
+                e.currentTarget.textContent = 'Копировать';
+            }, 1500);
+        });
+
+        document.getElementById('btn-open-world-create').addEventListener('click', () => {
+            showSubMenu(menuWorldCreate);
+        });
+
+        document.getElementById('btn-cancel-world-create').addEventListener('click', () => {
+            showSubMenu('main');
+        });
+
+        document.getElementById('btn-random-seed').addEventListener('click', () => {
+            sound.playClick();
+            const seeds = ['PIZDACRAFT-777', 'ALPHA-2010', 'VOXEL-KING', 'SIBERIA-99', 'GOLD-VALLEY', 'ISLAND-42'];
+            const pick = seeds[Math.floor(Math.random() * seeds.length)] + '-' + Math.floor(Math.random() * 999);
+            document.getElementById('input-world-seed').value = pick;
+        });
+
+        document.getElementById('btn-world-type').addEventListener('click', (e) => {
+            sound.playClick();
+            worldSettings.terrainType = (worldSettings.terrainType + 1) % TERRAIN_TYPES.length;
+            e.currentTarget.textContent = `Рельеф: ${TERRAIN_TYPES[worldSettings.terrainType]}`;
+        });
+
+        document.getElementById('btn-start-custom-world').addEventListener('click', () => {
+            const nameVal = document.getElementById('input-world-name').value.trim() || 'Новый Мир';
+            const seedVal = document.getElementById('input-world-seed').value.trim() || String(Date.now());
+            worldSettings.name = nameVal;
+            worldSettings.seedString = seedVal;
+            generateWorld();
+            startGameSession();
+        });
+
+        document.getElementById('btn-open-settings').addEventListener('click', () => {
+            showSubMenu(menuSettings);
+        });
+
+        document.getElementById('btn-close-settings').addEventListener('click', () => {
+            showSubMenu('main');
+        });
+
+        document.getElementById('btn-open-controls').addEventListener('click', () => {
+            showSubMenu(menuControls);
+        });
+
+        document.getElementById('btn-close-controls').addEventListener('click', () => {
+            showSubMenu('main');
+        });
+
+        document.getElementById('btn-regenerate-panorama').addEventListener('click', () => {
+            sound.playClick();
+            worldSettings.seedString = 'PANO-' + Math.floor(Math.random() * 99999);
+            document.getElementById('input-world-seed').value = worldSettings.seedString;
+            generateWorld();
+        });
+
+        document.getElementById('slider-fov').addEventListener('input', (e) => {
+            const val = parseInt(e.target.value, 10);
+            camera.fov = val;
+            camera.updateProjectionMatrix();
+            document.getElementById('label-fov').textContent = `Поле зрения (FOV): ${val}°`;
+        });
+
+        document.getElementById('slider-radius').addEventListener('change', (e) => {
+            const val = parseInt(e.target.value, 10);
+            worldSettings.radius = val;
+            const size = val * 2;
+            document.getElementById('label-radius').textContent = `Дальность мира: ${size}x${size} блоков`;
+            generateWorld();
+        });
+
+        document.getElementById('slider-sens').addEventListener('input', (e) => {
+            const val = parseInt(e.target.value, 10);
+            player.mouseSensitivity = val * 0.00044;
+            document.getElementById('label-sens').textContent = `Чувствительность мыши: ${val * 20}%`;
+        });
+
+        document.getElementById('slider-volume').addEventListener('input', (e) => {
+            const val = parseInt(e.target.value, 10);
+            sound.setMasterVolume(val / 100);
+            document.getElementById('label-volume').textContent = `Громкость звуков: ${val}%`;
+        });
+
+        document.getElementById('btn-setting-time').addEventListener('click', () => {
+            sound.playClick();
+            applyTimeOfDay(currentTimeIdx + 1);
+        });
+
+        document.getElementById('btn-hud-time').addEventListener('click', (e) => {
+            e.stopPropagation();
+            sound.playClick();
+            applyTimeOfDay(currentTimeIdx + 1);
+        });
+
+        document.getElementById('btn-hud-pause').addEventListener('click', (e) => {
+            e.stopPropagation();
+            sound.playClick();
+            pauseGame();
+        });
+
+        document.getElementById('btn-resume-game').addEventListener('click', () => {
+            resumeGame();
+        });
+
+        document.getElementById('btn-pause-fly').addEventListener('click', () => {
+            sound.playClick();
+            toggleFlyMode();
+        });
+
+        document.getElementById('btn-pause-time').addEventListener('click', () => {
+            sound.playClick();
+            applyTimeOfDay(currentTimeIdx + 1);
+        });
+
+        document.getElementById('btn-respawn').addEventListener('click', () => {
+            sound.playClick();
+            respawnPlayer();
+            resumeGame();
+        });
+
+        document.getElementById('btn-quit-to-title').addEventListener('click', () => {
+            quitToMainMenu();
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        /***********************************************************************
+         * 11. ГЛАВНЫЙ ИГРОВОЙ ЦИКЛ (ПАНОРАМА В МЕНЮ + ГЕЙМПЛЕЙ)
+         ***********************************************************************/
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let fpsAccumulator = 0;
+
+        function animate(now) {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min((now - lastTime) / 1000, 0.1);
+            lastTime = now;
+
+            frameCount++;
+            fpsAccumulator += dt;
+            if (fpsAccumulator >= 0.5) {
+                const fps = Math.round(frameCount / fpsAccumulator);
+                document.getElementById('hud-fps').textContent = fps;
+                frameCount = 0;
+                fpsAccumulator = 0;
+            }
+
+            cloudsGroup.children.forEach(cloud => {
+                cloud.position.x += dt * 0.65;
+                if (cloud.position.x > 75) cloud.position.x = -75;
+            });
+
+            if (waterSurfaceMesh) {
+                waterSurfaceMesh.position.y = Math.sin(now * 0.0022) * 0.025;
+            }
+
+            waterTickAccumulator += dt;
+            if (waterTickAccumulator >= WATER_TICK_INTERVAL) {
+                waterTickAccumulator = 0;
+                stepWaterPhysics();
+            }
+
+            mpManager.update(dt);
+
+            if (gameState === 'MENU') {
+                handGroup.visible = false;
+                panoramaAngle += dt * 0.14;
+                const camRadius = 18;
+                camera.up.set(0, 1, 0);
+                camera.position.set(
+                    Math.cos(panoramaAngle) * camRadius,
+                    19 + Math.sin(panoramaAngle * 2) * 1.5,
+                    Math.sin(panoramaAngle) * camRadius
+                );
+                camera.lookAt(0, 10, 0);
+            } else if (gameState === 'PLAYING') {
+                updatePlayerPhysics(dt);
+                updateBlockHighlight();
+                updateParticles(dt);
+            } else if (gameState === 'PAUSED') {
+                camera.up.set(0, 1, 0);
+                camera.rotation.order = 'YXZ';
+                camera.rotation.set(player.pitch, player.yaw, 0);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = function() {
+            generateWorld();
+            handGroup.visible = false;
+            animate(performance.now());
+        };
+    </script>
+</body>
+</html>
